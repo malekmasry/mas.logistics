@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAS logistics | Оптимизация маршрутов</title>
+    <style>
+        :root {
+            --bg-cream: #FDFCF0;
+            --airy-blue: #A9CDE5;
+            --airy-blue-hover: #8AB8D4;
+            --text-dark: #2C3E50;
+            --text-light: #5A6A7A;
+            --card-bg: #FFFFFF;
+            --shadow: 0 12px 35px rgba(0, 0, 0, 0.05);
+            --radius-large: 24px;
+            --radius-medium: 12px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-cream);
+            color: var(--text-dark);
+            line-height: 1.6;
+        }
+
+        header {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            background-color: var(--airy-blue);
+            padding: 15px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+            box-shadow: 0 4px 15px rgba(169, 205, 229, 0.4);
+        }
+        .logo { font-size: 28px; font-weight: 800; color: white; }
+        
+        main { padding-top: 100px; padding-bottom: 50px; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 0 20px; }
+
+        .calc-container {
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: var(--radius-large);
+            box-shadow: var(--shadow);
+        }
+
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; }
+        input, select {
+            width: 100%;
+            padding: 14px 20px;
+            border: 2px solid #E5EAF0;
+            border-radius: var(--radius-medium);
+            outline: none;
+            font-size: 1rem;
+        }
+
+        .btn {
+            padding: 16px 30px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: 0.3s;
+        }
+        .btn-primary { background: var(--airy-blue); color: white; }
+        .btn-secondary { background: #f0f0f0; color: var(--text-dark); }
+        .btn-add { background: #e8f4fd; color: #2b80ff; margin-bottom: 15px; }
+
+        .stop-item { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+        .btn-remove { color: #ff4d4f; cursor: pointer; font-weight: bold; }
+
+        #compare-section {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: var(--radius-medium);
+            display: none;
+        }
+
+        .results-wrapper { display: grid; grid-template-columns: 1fr; gap: 20px; margin-top: 30px; }
+        .results-wrapper.side-by-side { grid-template-columns: 1fr 1fr; }
+
+        .result-card {
+            background: white;
+            padding: 25px;
+            border-radius: var(--radius-large);
+            box-shadow: var(--shadow);
+            border: 2px solid transparent;
+        }
+        .result-card.winner { border-color: #28a745; }
+
+        .diff-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        .diff-plus { background: #ffebeb; color: #d93025; }
+        .diff-minus { background: #e6f4ea; color: #1e8e3e; }
+
+        .step {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">MAS logistics</div>
+        <div style="color:white; font-weight: bold;">Multi-stop & Comparison</div>
+    </header>
+
+    <main class="container">
+        <div class="calc-container">
+            <h2 style="margin-bottom: 25px;">Планировщик маршрута</h2>
+
+            <div class="form-group">
+                <label>Точка А (Начало):</label>
+                <input type="text" id="startCity" value="Cairo">
+            </div>
+
+            <div id="stops-container"></div>
+            <button class="btn btn-add" onclick="addStop()">+ Добавить промежуточную остановку</button>
+
+            <div class="form-group">
+                <label>Точка Б (Конец):</label>
+                <input type="text" id="endCity" value="Alexandria">
+            </div>
+
+            <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+                <div style="flex: 1;">
+                    <label>Метод 1:</label>
+                    <select id="method1" onchange="toggleConstraints(1)">
+                        <option value="multi_criteria">Оптимальный (Баланс)</option>
+                        <option value="dijkstra_cost">Самый дешевый</option>
+                        <option value="dijkstra_time">Самый быстрый</option>
+                        <option value="constrained">С ограничением</option>
+                    </select>
+                </div>
+                <div style="display: flex; align-items: flex-end;">
+                    <button class="btn btn-secondary" id="compare-toggle" onclick="toggleCompareMode()">Сравнить с другим методом</button>
+                </div>
+            </div>
+
+            <div id="constraint-1" style="display:none; background:#f0f7ff; padding: 15px; border-radius: 12px; margin-bottom: 20px;">
+                <label>Лимит:</label>
+                <div style="display:flex; gap:10px;">
+                    <select id="cType1" style="width: 150px;"><option value="time">Время (ч)</option><option value="cost">Цена (у.е.)</option></select>
+                    <input type="number" id="cVal1" placeholder="Значение...">
+                </div>
+            </div>
+
+            <div id="compare-section">
+                <div class="form-group">
+                    <label>Метод 2 (для сравнения):</label>
+                    <select id="method2" onchange="toggleConstraints(2)">
+                        <option value="dijkstra_time">Самый быстрый</option>
+                        <option value="dijkstra_cost">Самый дешевый</option>
+                        <option value="multi_criteria">Оптимальный (Баланс)</option>
+                        <option value="constrained">С ограничением</option>
+                    </select>
+                </div>
+                <div id="constraint-2" style="display:none; background:#f0f7ff; padding: 15px; border-radius: 12px;">
+                    <label>Лимит 2:</label>
+                    <div style="display:flex; gap:10px;">
+                        <select id="cType2" style="width: 150px;"><option value="time">Время (ч)</option><option value="cost">Цена (у.е.)</option></select>
+                        <input type="number" id="cVal2" placeholder="Значение...">
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" style="width: 100%; margin-top: 20px; font-size: 1.1rem;" onclick="processRoute()">Найти лучший путь</button>
+        </div>
+
+        <div id="results-area" class="results-wrapper"></div>
+    </main>
+
+    <script>
+        let compareMode = false;
+
+        function addStop() {
+            const container = document.getElementById('stops-container');
+            const div = document.createElement('div');
+            div.className = 'stop-item';
+            div.innerHTML = `
+                <input type="text" class="stop-input" placeholder="Промежуточный город...">
+                <span class="btn-remove" onclick="this.parentElement.remove()">✕</span>
+            `;
+            container.appendChild(div);
+        }
+
+        function toggleCompareMode() {
+            compareMode = !compareMode;
+            document.getElementById('compare-section').style.display = compareMode ? 'block' : 'none';
+            document.getElementById('compare-toggle').innerText = compareMode ? 'Убрать сравнение' : 'Сравнить с другим методом';
+        }
+
+        function toggleConstraints(num) {
+            const method = document.getElementById('method' + num).value;
+            document.getElementById('constraint-' + num).style.display = (method === 'constrained') ? 'block' : 'none';
+        }
+
+        async function fetchRoute(methodIdx) {
+            const payload = {
+                start: document.getElementById('startCity').value,
+                end: document.getElementById('endCity').value,
+                stops: Array.from(document.querySelectorAll('.stop-input')).map(i => i.value).filter(v => v),
+                method: document.getElementById('method' + methodIdx).value
+            };
+
+            if (payload.method === 'constrained') {
+                payload.constraint_type = document.getElementById('cType' + methodIdx).value;
+                payload.constraint_value = parseFloat(document.getElementById('cVal' + methodIdx).value);
+            }
+
+            const res = await fetch('http://127.0.0.1:8000/api/find_route', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            return res.json();
+        }
+
+        async function processRoute() {
+            const resultsArea = document.getElementById('results-area');
+            resultsArea.innerHTML = "<p style='text-align:center;'>Анализируем маршруты...</p>";
+
+            try {
+                const data1 = await fetchRoute(1);
+                let data2 = null;
+                if (compareMode) {
+                    data2 = await fetchRoute(2);
+                }
+
+                displayResults(data1, data2);
+            } catch (e) {
+                resultsArea.innerHTML = `<p style="color:red">Ошибка: ${e.message}</p>`;
+            }
+        }
+
+        function displayResults(r1, r2) {
+            const area = document.getElementById('results-area');
+            area.className = r2 ? 'results-wrapper side-by-side' : 'results-wrapper';
+            
+            let html = renderCard(r1, "Вариант 1", r2);
+            if (r2) {
+                html += renderCard(r2, "Вариант 2", r1);
+            }
+            area.innerHTML = html;
+        }
+
+        function renderCard(data, title, other) {
+            if (data.detail) return `<div class="result-card" style="color:red">Ошибка: ${data.detail}</div>`;
+
+            let diffHtml = "";
+            if (other && !other.detail) {
+                const costDiff = (data.total_cost - other.total_cost).toFixed(1);
+                const timeDiff = (data.total_time - other.total_time).toFixed(1);
+                
+                diffHtml = `
+                    <div style="margin-bottom: 15px;">
+                        <span class="diff-badge ${costDiff <= 0 ? 'diff-minus' : 'diff-plus'}">
+                            ${costDiff <= 0 ? '' : '+'}${costDiff} у.е.
+                        </span>
+                        <span class="diff-badge ${timeDiff <= 0 ? 'diff-minus' : 'diff-plus'}">
+                            ${timeDiff <= 0 ? '' : '+'}${timeDiff} ч.
+                        </span>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="result-card">
+                    <h3 style="margin-bottom:10px;">${title} (${data.method_used})</h3>
+                    ${diffHtml}
+                    <div style="font-size: 1.2rem; font-weight: bold; margin-bottom: 5px;">
+                        ${data.total_cost} у.е. | ${data.total_time} ч.
+                    </div>
+                    <p style="color:var(--text-light); font-size: 0.9rem; margin-bottom: 15px;">
+                        Маршрут: ${data.route.join(' ➔ ')}
+                    </p>
+                    <div class="steps-list">
+                        ${data.details.map(s => `
+                            <div class="step">
+                                <b>${s.from_city} ➔ ${s.to_city}</b> (${s.transport})<br>
+                                <span style="color:#666">${s.cost} у.е. | ${s.time} ч.</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
