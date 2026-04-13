@@ -85,7 +85,59 @@ app.add_middleware(
 )
 
 
+import json
+import time
+
 # --- МОДЕЛИ ДАННЫХ ---
+class Project(BaseModel):
+    id: Optional[str] = None
+    name: str
+    start: str
+    end: str
+    stops: List[str] = []
+    method: str
+    constraint_type: Optional[str] = None
+    constraint_value: Optional[float] = None
+    # Сохраненные результаты (чтобы видеть их сразу без пересчета)
+    last_result: Optional[dict] = None
+
+PROJECTS_FILE = "projects.json"
+
+def load_projects():
+    if os.path.exists(PROJECTS_FILE):
+        try:
+            with open(PROJECTS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except: return {}
+    return {}
+
+def save_projects(projects):
+    with open(PROJECTS_FILE, "w", encoding="utf-8") as f:
+        json.dump(projects, f, ensure_ascii=False, indent=4)
+
+@app.get("/api/projects")
+def get_projects():
+    return load_projects()
+
+@app.post("/api/projects")
+def create_project(project: Project):
+    projects = load_projects()
+    # Используем метку времени для уникального ID
+    project_id = project.id if project.id else str(int(time.time() * 1000))
+    project.id = project_id
+    projects[project_id] = project.dict()
+    save_projects(projects)
+    return project
+
+@app.delete("/api/projects/{project_id}")
+def delete_project(project_id: str):
+    projects = load_projects()
+    if project_id in projects:
+        del projects[project_id]
+        save_projects(projects)
+        return {"status": "deleted"}
+    raise HTTPException(status_code=404, detail="Проект не найден")
+
 class RouteRequest(BaseModel):
     start: str
     end: str
