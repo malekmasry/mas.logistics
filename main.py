@@ -14,42 +14,44 @@ import time
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables from .env file for configuration like API keys
 load_dotenv()
 
 # --- WEATHER CLIENT WITH CACHE & DEBUGGING ---
+# This class handles all communication with the external Weather API.
+# It includes a simple in-memory cache to avoid redundant network calls for the same city.
 class WeatherClient:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.url = "https://api.weatherapi.com/v1/current.json"
-        self.cache = {} # Simple in-memory cache city -> data
+        self.cache = {} # Map of city name -> weather data dictionary
 
     def get(self, city: str, lat: float, lon: float):
-        # Check cache first
+        # Return cached data if available for this city to save API credits and time
         if city in self.cache:
             print(f"DEBUG: Using cached weather for {city}")
             return self.cache[city]
         
         try:
+            # Request current weather based on coordinates
             params = {"key": self.api_key, "q": f"{lat},{lon}"}
             response = requests.get(self.url, params=params, timeout=5)
 
-            # --- DEBUG: WeatherAPI Request ---
+            # Logging for troubleshooting API responses and limit tracking
             print(f"\n--- DEBUG: WeatherAPI Request ---")
             print(f"City Coordinates: {lat}, {lon} ({city})")
             print(f"HTTP Status Code: {response.status_code} (200 is OK)")
 
-            # Check for specific WeatherAPI headers (limit tracking)
             limit_left = response.headers.get('x-weatherapi-qpm-left', 'N/A')
             print(f"API Calls Left this month: {limit_left}")
 
-            # Show raw response body
-            print(f"Raw Server Response: {response.text[:200]}...") # Show first 200 chars
+            print(f"Raw Server Response: {response.text[:200]}...")
             print(f"---------------------------------\n")
 
             response.raise_for_status()
             data = response.json()
             
+            # Extract only the essential fields: condition and wind speed
             result = {
                 "condition": data['current']['condition']['text'],
                 "wind": data['current']['wind_kph']
@@ -58,18 +60,22 @@ class WeatherClient:
             return result
         except Exception as e:
             print(f"!!! Weather API ERROR for {city}: {e}")
-            # Safe fallback so the routing doesn't crash
+            # Fallback to neutral weather if the API fails, ensuring routing still works
             return {"condition": "Clear", "wind": 0.0}
 
 # --- ENGINE ---
+# The core logic for Multi-Agent System (MAS) Routing.
+# It builds a graph from Excel data and calculates optimal paths based on cost, time, and weather.
 class MASRoutingEngine:
     def __init__(self, excel_path: str):
         self.excel_path = excel_path
-        # Use environment variable for security
+        # Securely retrieve the API key from environment variables
         api_key = os.getenv("WEATHER_API_KEY")
         if not api_key:
             print("WARNING: WEATHER_API_KEY not set. Weather features will use fallback data.")
         self.weather = WeatherClient(api_key)
+        
+        # Hardcoded default coordinates for major cities; can be extended via Excel
         self.city_coords = {
             "Cairo": (30.0444, 31.2357), "Alexandria": (31.2001, 29.9187), "Giza": (30.0131, 31.2089),
             "Hurghada": (27.2579, 33.8116), "Sharm El-Sheikh": (27.9158, 34.3299), "Luxor": (25.6872, 32.6396),
@@ -83,24 +89,30 @@ class MASRoutingEngine:
             "Dakhla": (25.5, 29.1667), "Kharga": (25.44, 30.55), "Baltim": (31.5333, 31.0833),
             "Tanta": (30.7865, 31.0004), "Mansoura": (31.0409, 31.3785)
         }
+        # MultiDiGraph allows multiple edges (different transport modes) between same cities
         self.base_graph = nx.MultiDiGraph()
         self._load_data()
 
+    # Loads and merges logistics data from the provided Excel file into the internal graph
     def _load_data(self):
         try:
-            routes = pd.read_excel(self.excel_path, sheet_name='routes')
-            trans = pd.read_excel(self.excel_path, sheet_name='transport')
-            costs = pd.read_excel(self.excel_path, sheet_name='cost')
-            
+            # Open the Excel file once to read all required sheets efficiently
             xl = pd.ExcelFile(self.excel_path)
+            routes = pd.read_excel(xl, sheet_name='routes')
+            trans = pd.read_excel(xl, sheet_name='transport')
+            costs = pd.read_excel(xl, sheet_name='cost')
+            
+            # Load extra city coordinates if the optional 'cities' sheet exists
             if 'cities' in xl.sheet_names:
-                cities_df = pd.read_excel(self.excel_path, sheet_name='cities')
+                cities_df = pd.read_excel(xl, sheet_name='cities')
                 for _, r in cities_df.iterrows():
                     self.city_coords[str(r['city_name']).strip()] = (r['lat'], r['lon'])
 
+            # Join routes with transport details and cost information using transport_id as key
             df = pd.merge(routes, trans, on='transport_id')
             df = pd.merge(df, costs, on='transport_id')
             
+            # Populate the NetworkX graph with city nodes and transport edges
             for _, row in df.iterrows():
                 u, v = str(row['from']).strip(), str(row['to']).strip()
                 self.base_graph.add_edge(u, v, cost=row['distance'] * row['cost_per_km kg'],
@@ -108,6 +120,7 @@ class MASRoutingEngine:
         except Exception as e:
             print(f"Engine data load failed: {e}")
 
+    # Retrieves weather conditions for every city in a given path for UI reporting
     def get_path_weather(self, path):
         reports = {}
         for city in path:
@@ -116,84 +129,126 @@ class MASRoutingEngine:
             reports[city] = f"{data['condition']}, {data['wind']}km/h"
         return reports
 
+    # Calculates the optimal path between two cities based on method (time, cost, or constrained)
     def solve_segment(self, start, end, method, c_type, c_val):
-        G_seg = self.base_graph.copy()
+        # Fetch weather for the start city to determine transport penalties (e.g., rain slows trucks)
         coords = self.city_coords.get(start, (30.0, 31.0))
         w = self.weather.get(start, coords[0], coords[1])
         cond, wind = w['condition'].lower(), w['wind']
 
-        for u, v, k, data in G_seg.edges(keys=True, data=True):
-            if u != start: continue 
-            mode = str(data['transport']).lower()
+        # Helper to calculate weather-adjusted travel time based on transport mode
+        def get_modified_time(u, mode, original_time):
+            # Only apply weather effects to edges originating from the 'current' start location
+            if u != start:
+                return original_time
+            mod_time = original_time
             if "rain" in cond or "drizzle" in cond:
-                if "plane" in mode: data['time'] = 999999
-                elif any(x in mode for x in ["car", "truck"]): data['time'] *= 1.2
-                elif "train" in mode: data['time'] *= 1.1
+                if "plane" in mode: mod_time = 999999 # Grounded
+                elif any(x in mode for x in ["car", "truck"]): mod_time *= 1.2
+                elif "train" in mode: mod_time *= 1.1
             if "cloudy" in cond or "overcast" in cond:
-                if "plane" in mode: data['time'] *= 1.2
-            if wind > 25 and "ship" in mode: data['time'] *= 1.3
+                if "plane" in mode: mod_time *= 1.2
+            if wind > 25 and "ship" in mode: mod_time *= 1.3
+            return mod_time
 
+        # --- OPTION 1: CONSTRAINED SHORTEST PATH (e.g., Min Cost where Time <= X) ---
         if method == "constrained" and c_val:
             is_time = "time" in (c_type or "").lower()
-            obj_key, cons_key = ('cost', 'time') if is_time else ('time', 'cost')
+            # Priority Queue format: (objective_value, constraint_value, current_node, path_history, steps_history)
             pq = [(0.0, 0.0, start, [start], [])]
-            min_cons = {n: float('inf') for n in G_seg.nodes()}
+            min_cons = {n: float('inf') for n in self.base_graph.nodes()}
             while pq:
                 o, c, u, path, steps = heapq.heappop(pq)
+                # Standard Dijkstra optimization: skip if we've reached this node with a better constraint value
                 if c >= min_cons.get(u, float('inf')): continue
                 min_cons[u] = c
+                
                 if u == end: return path, steps, o if is_time else c, c if is_time else o
-                for v in G_seg.successors(u):
-                    for edata in G_seg[u][v].values():
-                        nc = c + edata[cons_key]
+                
+                for v in self.base_graph.successors(u):
+                    for edata in self.base_graph[u][v].values():
+                        eff_time = get_modified_time(u, str(edata['transport']).lower(), edata['time'])
+                        e_obj = edata['cost'] if is_time else eff_time
+                        e_cons = eff_time if is_time else edata['cost']
+                        nc = c + e_cons
+                        # Only push to queue if the constraint (e.g., total time) is still within bounds
                         if nc <= c_val and nc < min_cons.get(v, float('inf')):
                             new_step = {"from_city": u, "to_city": v, "transport": edata['transport'],
-                                        "cost": round(edata['cost'], 2), "time": round(edata['time'], 2)}
-                            heapq.heappush(pq, (o + edata[obj_key], nc, v, path + [v], steps + [new_step]))
+                                        "cost": round(edata['cost'], 2), "time": round(eff_time, 2)}
+                            heapq.heappush(pq, (o + e_obj, nc, v, path + [v], steps + [new_step]))
             raise HTTPException(404, f"No route {start}->{end} under limit")
 
+        # --- OPTION 2: DIJKSTRA (Simple Time or Cost Optimization) ---
         weight_key = 'time' if 'time' in method else 'cost'
+        
+        # Dynamic edge weight function to handle MultiDiGraph and weather adjustments on-the-fly
+        def edge_weight(u, v, d):
+            min_w = float('inf')
+            for edata in d.values():
+                eff_time = get_modified_time(u, str(edata['transport']).lower(), edata['time'])
+                w = edata['cost'] if weight_key == 'cost' else eff_time
+                if w < min_w:
+                    min_w = w
+            return min_w
+
         try:
-            path = nx.dijkstra_path(G_seg, start, end, weight=weight_key)
+            # Find the nodes in the shortest path
+            path = nx.dijkstra_path(self.base_graph, start, end, weight=edge_weight)
             steps, tc, tt = [], 0, 0
+            # Reconstruct the specific edges (transport modes) used in the path
             for i in range(len(path)-1):
                 u, v = path[i], path[i+1]
-                best = min(G_seg[u][v].values(), key=lambda x: x[weight_key])
-                tc += best['cost']
-                tt += best['time']
-                steps.append({"from_city": u, "to_city": v, "transport": best['transport'],
-                              "cost": round(best['cost'], 2), "time": round(best['time'], 2)})
+                best_edge, best_val, best_eff_time = None, float('inf'), 0
+                for edata in self.base_graph[u][v].values():
+                    eff_time = get_modified_time(u, str(edata['transport']).lower(), edata['time'])
+                    val = edata['cost'] if weight_key == 'cost' else eff_time
+                    if val < best_val:
+                        best_val, best_edge, best_eff_time = val, edata, eff_time
+                
+                tc += best_edge['cost']
+                tt += best_eff_time
+                steps.append({"from_city": u, "to_city": v, "transport": best_edge['transport'],
+                              "cost": round(best_edge['cost'], 2), "time": round(best_eff_time, 2)})
             return path, steps, tc, tt
         except:
             raise HTTPException(404, f"No path found between {start} and {end}")
 
 # --- API ---
+# Initialize FastAPI application with CORS enabled for frontend integration
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+# Instantiate the routing engine with the logistics dataset
 ENGINE = MASRoutingEngine('C:\\python\\графы.xlsx')
 
+# Pydantic model for validating incoming route requests
 class RouteRequest(BaseModel):
     start: str
     end: str
     stops: Optional[List[str]] = []
-    method: str
+    method: str # 'cost', 'time', or 'constrained'
     constraint_type: Optional[str] = None
     constraint_value: Optional[float] = None
 
+# Primary endpoint to find an end-to-end route, handling any intermediate stops
 @app.post("/api/find_route")
 def find_route(request: RouteRequest):
     stops = [s.strip() for s in (request.stops or []) if s.strip()]
     points = [request.start.strip()] + stops + [request.end.strip()]
     final_path, final_details = [], []
     total_cost, total_time = 0.0, 0.0
+    
+    # Process each leg of the journey sequentially (Start -> Stop1 -> Stop2 -> End)
     for i in range(len(points) - 1):
         p, d, c, t = ENGINE.solve_segment(points[i], points[i+1], request.method, 
                                          request.constraint_type, request.constraint_value)
+        # Stitch paths together, avoiding duplicate city names at segment boundaries
         if not final_path: final_path.extend(p)
         else: final_path.extend(p[1:])
         final_details.extend(d)
         total_cost += c
         total_time += t
+    
     return {
         "route": final_path,
         "details": final_details,
@@ -203,12 +258,14 @@ def find_route(request: RouteRequest):
         "weather_reports": ENGINE.get_path_weather(final_path)
     }
 
+# Endpoint to retrieve all saved routing projects from local storage
 @app.get("/api/projects")
 def get_projects():
     if os.path.exists("projects.json"):
         with open("projects.json", "r", encoding="utf-8") as f: return json.load(f)
     return {}
 
+# Endpoint to save a new routing project or update an existing one
 @app.post("/api/projects")
 def save_project(project: dict):
     data = get_projects()
@@ -218,6 +275,7 @@ def save_project(project: dict):
     with open("projects.json", "w", encoding="utf-8") as f: json.dump(data, f, indent=4)
     return project
 
+# Endpoint to remove a saved project by its ID
 @app.delete("/api/projects/{pid}")
 def delete_project(pid: str):
     data = get_projects()
@@ -226,5 +284,6 @@ def delete_project(pid: str):
         with open("projects.json", "w", encoding="utf-8") as f: json.dump(data, f, indent=4)
     return {"ok": True}
 
+# Entry point for running the web server
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
