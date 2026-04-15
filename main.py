@@ -29,40 +29,32 @@ class WeatherClient:
     def get(self, city: str, lat: float, lon: float):
         # Return cached data if available for this city to save API credits and time
         if city in self.cache:
-            print(f"DEBUG: Using cached weather for {city} ({lat}, {lon})")
             return self.cache[city]
         
         try:
             # Request current weather based on coordinates
             params = {"key": self.api_key, "q": f"{lat},{lon}"}
-            print(f"DEBUG: Fetching NEW weather for {city} at {lat}, {lon}")
-            response = requests.get(self.url, params=params, timeout=5)
+            print(f"DEBUG: Fetching NEW weather for {city} at {lat}, {lon}...")
+            # Increased timeout to 10s to handle slower connections
+            response = requests.get(self.url, params=params, timeout=10)
 
-            # Logging for troubleshooting API responses and limit tracking
-            print(f"\n--- DEBUG: WeatherAPI Request ---")
-            print(f"City Coordinates: {lat}, {lon} ({city})")
-            print(f"HTTP Status Code: {response.status_code} (200 is OK)")
-
-            limit_left = response.headers.get('x-weatherapi-qpm-left', 'N/A')
-            print(f"API Calls Left this month: {limit_left}")
-
-            print(f"Raw Server Response: {response.text[:200]}...")
-            print(f"---------------------------------\n")
-
-            response.raise_for_status()
-            data = response.json()
-            
-            # Extract only the essential fields: condition and wind speed
-            result = {
-                "condition": data['current']['condition']['text'],
-                "wind": data['current']['wind_kph']
-            }
-            self.cache[city] = result
-            return result
+            if response.status_code == 200:
+                data = response.json()
+                result = {
+                    "condition": data['current']['condition']['text'],
+                    "wind": data['current']['wind_kph']
+                }
+                print(f"DEBUG: Successfully fetched {city}: {result['condition']}, {result['wind']}km/h")
+                self.cache[city] = result
+                return result
+            else:
+                print(f"!!! Weather API returned {response.status_code} for {city}")
         except Exception as e:
-            print(f"!!! Weather API ERROR for {city}: {e}")
-            # Fallback to neutral weather if the API fails, ensuring routing still works
-            return {"condition": "Clear", "wind": 0.0}
+            print(f"!!! Weather API ERROR for {city} ({lat}, {lon}): {e}")
+        
+        # Fallback to neutral weather if the API fails, ensuring routing still works
+        # We don't cache failures so we can try again on the next request
+        return {"condition": "N/A", "wind": 0.0}
 
 # --- ENGINE ---
 # The core logic for Multi-Agent System (MAS) Routing.
