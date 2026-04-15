@@ -309,7 +309,7 @@ app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # Instantiate the routing engine with the logistics dataset
-ENGINE = MASRoutingEngine('C:\\python\\графы.xlsx')
+ENGINE = MASRoutingEngine('графы.xlsx')
 
 # Pydantic model for validating incoming route requests
 class RouteRequest(BaseModel):
