@@ -235,25 +235,52 @@ class MASRoutingEngine:
             raise HTTPException(404, f"No route {start}->{end} under limit")
 
         # --- OPTION 2: DIJKSTRA (Simple Time or Cost Optimization) ---
-        weight_key = method
-        
-        # Dynamic edge weight function to handle MultiDiGraph and weather adjustments on-the-fly
-        def edge_weight(u, v, d):
-            min_w = float('inf')
-            for edata in d.values():
-                eff_time = get_modified_time(u, str(edata['transport']).lower(), edata['time'])
-                if weight_key == 'dijkstra_time': w = eff_time
-                elif weight_key == 'dijkstra_cost': w = edata['cost']
-                else: w = edata['cost'] + (eff_time * 250) # Balanced 'Optimal' multi-criteria
-                if w < min_w:
-                    min_w = w
-            return min_w
+        if method == "multi_criteria":
+            # 1. Get Cheapest
+            p_c, s_c, c_c, t_c = self.solve_segment(start, end, "dijkstra_cost", None, None)
+            # 2. Get Fastest
+            p_f, s_f, c_f, t_f = self.solve_segment(start, end, "dijkstra_time", None, None)
+            
+            # If they are already the same, that's the only logical 'optimal'
+            if p_c == p_f:
+                return p_c, s_c, c_c, t_c
+            
+            # 3. Calculate a weight that balances the specific cost/time trade-off for this pair
+            # We want: Delta_Cost + Weight * Delta_Time = 0 at the crossover point
+            # Weight = |Cost_fastest - Cost_cheapest| / |Time_cheapest - Time_fastest|
+            cost_diff = abs(c_f - c_c)
+            time_diff = abs(t_c - t_f)
+            
+            if time_diff < 0.001: # Avoid division by zero
+                return p_c, s_c, c_c, t_c
+                
+            balanced_weight = cost_diff / time_diff
+            
+            # Use this dynamic weight to find the 'middle' path
+            weight_key = "multi_criteria"
+            def edge_weight(u, v, d):
+                min_w = float('inf')
+                for edata in d.values():
+                    eff_time = get_modified_time(u, str(edata['transport']).lower(), edata['time'])
+                    w = edata['cost'] + (eff_time * balanced_weight)
+                    if w < min_w: min_w = w
+                return min_w
+        else:
+            weight_key = method
+            def edge_weight(u, v, d):
+                min_w = float('inf')
+                for edata in d.values():
+                    eff_time = get_modified_time(u, str(edata['transport']).lower(), edata['time'])
+                    if weight_key == 'dijkstra_time': w = eff_time
+                    else: w = edata['cost']
+                    if w < min_w: min_w = w
+                return min_w
 
         try:
             # Find the nodes in the shortest path
             path = nx.dijkstra_path(self.base_graph, start, end, weight=edge_weight)
             steps, tc, tt = [], 0, 0
-            # Reconstruct the specific edges (transport modes) used in the path
+            # Reconstruct the specific edges
             for i in range(len(path)-1):
                 u, v = path[i], path[i+1]
                 best_edge, best_val, best_eff_time = None, float('inf'), 0
@@ -262,7 +289,12 @@ class MASRoutingEngine:
                     
                     if weight_key == 'dijkstra_time': val = eff_time
                     elif weight_key == 'dijkstra_cost': val = edata['cost']
-                    else: val = edata['cost'] + (eff_time * 250)
+                    else: # multi_criteria
+                        # Re-calculate weight inside the loop for reconstruction
+                        cost_diff = abs(c_f - c_c)
+                        time_diff = abs(t_c - t_f)
+                        balanced_weight = cost_diff / time_diff
+                        val = edata['cost'] + (eff_time * balanced_weight)
                     
                     if val < best_val:
                         best_val, best_edge, best_eff_time = val, edata, eff_time
