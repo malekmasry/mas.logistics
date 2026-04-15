@@ -21,15 +21,20 @@ load_dotenv()
 # This class handles all communication with the external Weather API.
 # It includes a simple in-memory cache to avoid redundant network calls for the same city.
 class WeatherClient:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, ttl_seconds: int = 3600):
         self.api_key = api_key
         self.url = "https://api.weatherapi.com/v1/current.json"
-        self.cache = {} # Map of city name -> weather data dictionary
+        self.cache = {} # Map of city name -> (timestamp, weather_data)
+        self.ttl = ttl_seconds
 
     def get(self, city: str, lat: float, lon: float):
-        # Return cached data if available for this city to save API credits and time
+        now = time.time()
+        # Check if city is in cache and if the data is still fresh (within TTL)
         if city in self.cache:
-            return self.cache[city]
+            timestamp, data = self.cache[city]
+            if now - timestamp < self.ttl:
+                print(f"DEBUG: Using cached weather for {city} (Age: {int(now - timestamp)}s)")
+                return data
         
         try:
             # Request current weather based on coordinates
@@ -45,7 +50,8 @@ class WeatherClient:
                     "wind": data['current']['wind_kph']
                 }
                 print(f"DEBUG: Successfully fetched {city}: {result['condition']}, {result['wind']}km/h")
-                self.cache[city] = result
+                # Store data with current timestamp
+                self.cache[city] = (now, result)
                 return result
             else:
                 print(f"!!! Weather API returned {response.status_code} for {city}")
@@ -53,7 +59,6 @@ class WeatherClient:
             print(f"!!! Weather API ERROR for {city} ({lat}, {lon}): {e}")
         
         # Fallback to neutral weather if the API fails, ensuring routing still works
-        # We don't cache failures so we can try again on the next request
         return {"condition": "N/A", "wind": 0.0}
 
 # --- ENGINE ---
