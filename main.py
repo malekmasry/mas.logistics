@@ -21,47 +21,45 @@ load_dotenv()
 # This class handles all communication with the external Weather API.
 # It includes a simple in-memory cache to avoid redundant network calls for the same city.
 class WeatherClient:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, ttl_seconds: int = 3600):
         self.api_key = api_key
         self.url = "https://api.weatherapi.com/v1/current.json"
-        self.cache = {} # Map of city name -> weather data dictionary
+        self.cache = {} # Map of city name -> (timestamp, weather_data)
+        self.ttl = ttl_seconds
 
     def get(self, city: str, lat: float, lon: float):
-        # Return cached data if available for this city to save API credits and time
+        now = time.time()
+        # Check if city is in cache and if the data is still fresh (within TTL)
         if city in self.cache:
-            print(f"DEBUG: Using cached weather for {city}")
-            return self.cache[city]
+            timestamp, data = self.cache[city]
+            if now - timestamp < self.ttl:
+                print(f"DEBUG: Using cached weather for {city} (Age: {int(now - timestamp)}s)")
+                return data
         
         try:
             # Request current weather based on coordinates
             params = {"key": self.api_key, "q": f"{lat},{lon}"}
-            response = requests.get(self.url, params=params, timeout=5)
+            print(f"DEBUG: Fetching NEW weather for {city} at {lat}, {lon}...")
+            # Increased timeout to 10s to handle slower connections
+            response = requests.get(self.url, params=params, timeout=10)
 
-            # Logging for troubleshooting API responses and limit tracking
-            print(f"\n--- DEBUG: WeatherAPI Request ---")
-            print(f"City Coordinates: {lat}, {lon} ({city})")
-            print(f"HTTP Status Code: {response.status_code} (200 is OK)")
-
-            limit_left = response.headers.get('x-weatherapi-qpm-left', 'N/A')
-            print(f"API Calls Left this month: {limit_left}")
-
-            print(f"Raw Server Response: {response.text[:200]}...")
-            print(f"---------------------------------\n")
-
-            response.raise_for_status()
-            data = response.json()
-            
-            # Extract only the essential fields: condition and wind speed
-            result = {
-                "condition": data['current']['condition']['text'],
-                "wind": data['current']['wind_kph']
-            }
-            self.cache[city] = result
-            return result
+            if response.status_code == 200:
+                data = response.json()
+                result = {
+                    "condition": data['current']['condition']['text'],
+                    "wind": data['current']['wind_kph']
+                }
+                print(f"DEBUG: Successfully fetched {city}: {result['condition']}, {result['wind']}km/h")
+                # Store data with current timestamp
+                self.cache[city] = (now, result)
+                return result
+            else:
+                print(f"!!! Weather API returned {response.status_code} for {city}")
         except Exception as e:
-            print(f"!!! Weather API ERROR for {city}: {e}")
-            # Fallback to neutral weather if the API fails, ensuring routing still works
-            return {"condition": "Clear", "wind": 0.0}
+            print(f"!!! Weather API ERROR for {city} ({lat}, {lon}): {e}")
+        
+        # Fallback to neutral weather if the API fails, ensuring routing still works
+        return {"condition": "N/A", "wind": 0.0}
 
 # --- ENGINE ---
 # The core logic for Multi-Agent System (MAS) Routing.
@@ -75,20 +73,8 @@ class MASRoutingEngine:
             print("WARNING: WEATHER_API_KEY not set. Weather features will use fallback data.")
         self.weather = WeatherClient(api_key)
         
-        # Hardcoded default coordinates for major cities; can be extended via Excel
-        self.city_coords = {
-            "Cairo": (30.0444, 31.2357), "Alexandria": (31.2001, 29.9187), "Giza": (30.0131, 31.2089),
-            "Hurghada": (27.2579, 33.8116), "Sharm El-Sheikh": (27.9158, 34.3299), "Luxor": (25.6872, 32.6396),
-            "Aswan": (24.0889, 32.8998), "Marsa Alam": (25.0657, 34.8914), "Arish": (31.1316, 33.8032),
-            "Taba": (29.4936, 34.8914), "Sohag": (26.557, 31.6948), "Asyut": (27.1783, 31.1859),
-            "Borg El Arab": (30.9167, 29.6667), "Port Said": (31.2565, 32.2841), "Suez": (29.9668, 32.5498),
-            "Damietta": (31.4175, 31.8144), "Safaga": (26.7297, 33.9365), "Quseir": (26.1038, 34.276),
-            "Nuweiba": (28.9971, 34.6533), "Ras Gharib": (28.3597, 33.075), "Ain Sokhna": (29.585, 32.323),
-            "Ismailia": (30.5965, 32.2715), "Marsa Matruh": (31.3543, 27.2373), "El Tor": (28.235, 33.622),
-            "Shibin El Kom": (30.55, 31.01), "Beni Suef": (29.0667, 31.0833), "Qena": (26.1667, 32.7167),
-            "Dakhla": (25.5, 29.1667), "Kharga": (25.44, 30.55), "Baltim": (31.5333, 31.0833),
-            "Tanta": (30.7865, 31.0004), "Mansoura": (31.0409, 31.3785)
-        }
+        # City coordinates will be loaded from the 'cities' Excel sheet
+        self.city_coords = {}
         # MultiDiGraph allows multiple edges (different transport modes) between same cities
         self.base_graph = nx.MultiDiGraph()
         self._load_data()
@@ -106,7 +92,8 @@ class MASRoutingEngine:
             if 'cities' in xl.sheet_names:
                 cities_df = pd.read_excel(xl, sheet_name='cities')
                 for _, r in cities_df.iterrows():
-                    self.city_coords[str(r['city_name']).strip()] = (r['lat'], r['lon'])
+                    city = str(r['city_name']).strip()
+                    self.city_coords[city] = (float(r['lat']), float(r['lon']))
 
             # Join routes with transport details and cost information using transport_id as key
             df = pd.merge(routes, trans, on='transport_id')
@@ -115,6 +102,12 @@ class MASRoutingEngine:
             # Populate the NetworkX graph with city nodes and transport edges
             for _, row in df.iterrows():
                 u, v = str(row['from']).strip(), str(row['to']).strip()
+                
+                # Verify coordinates exist for both cities in the route
+                for city in [u, v]:
+                    if city not in self.city_coords:
+                        self.city_coords[city] = (30.0, 31.0) # Emergency fallback only
+
                 self.base_graph.add_edge(u, v, cost=row['distance'] * row['cost_per_km kg'],
                                          time=row['distance'] / row['speed'], transport=row['type'])
         except Exception as e:
@@ -313,7 +306,7 @@ app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # Instantiate the routing engine with the logistics dataset
-ENGINE = MASRoutingEngine('C:\\python\\графы.xlsx')
+ENGINE = MASRoutingEngine('графы.xlsx')
 
 # Pydantic model for validating incoming route requests
 class RouteRequest(BaseModel):
@@ -363,6 +356,12 @@ def find_route(request: RouteRequest):
         "method_used": request.method,
         "weather_reports": ENGINE.get_path_weather(final_path)
     }
+
+# Endpoint to clear the weather cache for testing purposes
+@app.get("/api/clear_cache")
+def clear_weather_cache():
+    ENGINE.weather.cache.clear()
+    return {"ok": True, "message": "Weather cache cleared"}
 
 # Endpoint to retrieve all saved routing projects from local storage
 @app.get("/api/projects")
