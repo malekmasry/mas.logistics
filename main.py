@@ -360,6 +360,12 @@ def find_route(request: RouteRequest):
         "weather_reports": ENGINE.get_path_weather(final_path)
     }
 
+# Endpoint to clear the weather cache for testing purposes
+@app.get("/api/clear_cache")
+def clear_weather_cache():
+    ENGINE.weather.cache.clear()
+    return {"ok": True, "message": "Weather cache cleared"}
+
 # Endpoint to retrieve all saved routing projects from local storage
 @app.get("/api/projects")
 def get_projects():
