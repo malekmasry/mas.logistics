@@ -104,10 +104,12 @@ class MASRoutingEngine:
             # Populate the NetworkX graph with city nodes and transport edges
             for _, row in df.iterrows():
                 u, v = str(row['from']).strip(), str(row['to']).strip()
-                # Ensure all cities used in routes have at least fallback coordinates for weather fetching
+                
+                # Verify coordinates exist for both cities in the route
                 for city in [u, v]:
                     if city not in self.city_coords:
-                        self.city_coords[city] = (30.0, 31.0) # Default to central Egypt
+                        print(f"!!! ERROR: City '{city}' found in routes but MISSING from 'cities' sheet. Weather will be inaccurate.")
+                        self.city_coords[city] = (30.0, 31.0) # Emergency fallback only
 
                 self.base_graph.add_edge(u, v, cost=row['distance'] * row['cost_per_km kg'],
                                          time=row['distance'] / row['speed'], transport=row['type'])
