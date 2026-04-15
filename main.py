@@ -235,14 +235,16 @@ class MASRoutingEngine:
             raise HTTPException(404, f"No route {start}->{end} under limit")
 
         # --- OPTION 2: DIJKSTRA (Simple Time or Cost Optimization) ---
-        weight_key = 'time' if 'time' in method else 'cost'
+        weight_key = method
         
         # Dynamic edge weight function to handle MultiDiGraph and weather adjustments on-the-fly
         def edge_weight(u, v, d):
             min_w = float('inf')
             for edata in d.values():
                 eff_time = get_modified_time(u, str(edata['transport']).lower(), edata['time'])
-                w = edata['cost'] if weight_key == 'cost' else eff_time
+                if weight_key == 'dijkstra_time': w = eff_time
+                elif weight_key == 'dijkstra_cost': w = edata['cost']
+                else: w = edata['cost'] + (eff_time * 250) # Balanced 'Optimal' multi-criteria
                 if w < min_w:
                     min_w = w
             return min_w
@@ -257,7 +259,11 @@ class MASRoutingEngine:
                 best_edge, best_val, best_eff_time = None, float('inf'), 0
                 for edata in self.base_graph[u][v].values():
                     eff_time = get_modified_time(u, str(edata['transport']).lower(), edata['time'])
-                    val = edata['cost'] if weight_key == 'cost' else eff_time
+                    
+                    if weight_key == 'dijkstra_time': val = eff_time
+                    elif weight_key == 'dijkstra_cost': val = edata['cost']
+                    else: val = edata['cost'] + (eff_time * 250)
+                    
                     if val < best_val:
                         best_val, best_edge, best_eff_time = val, edata, eff_time
                 
