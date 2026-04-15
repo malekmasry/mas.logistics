@@ -29,12 +29,13 @@ class WeatherClient:
     def get(self, city: str, lat: float, lon: float):
         # Return cached data if available for this city to save API credits and time
         if city in self.cache:
-            print(f"DEBUG: Using cached weather for {city}")
+            print(f"DEBUG: Using cached weather for {city} ({lat}, {lon})")
             return self.cache[city]
         
         try:
             # Request current weather based on coordinates
             params = {"key": self.api_key, "q": f"{lat},{lon}"}
+            print(f"DEBUG: Fetching NEW weather for {city} at {lat}, {lon}")
             response = requests.get(self.url, params=params, timeout=5)
 
             # Logging for troubleshooting API responses and limit tracking
@@ -108,7 +109,6 @@ class MASRoutingEngine:
                 # Verify coordinates exist for both cities in the route
                 for city in [u, v]:
                     if city not in self.city_coords:
-                        print(f"!!! ERROR: City '{city}' found in routes but MISSING from 'cities' sheet. Weather will be inaccurate.")
                         self.city_coords[city] = (30.0, 31.0) # Emergency fallback only
 
                 self.base_graph.add_edge(u, v, cost=row['distance'] * row['cost_per_km kg'],
