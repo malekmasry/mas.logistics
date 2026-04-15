@@ -75,20 +75,8 @@ class MASRoutingEngine:
             print("WARNING: WEATHER_API_KEY not set. Weather features will use fallback data.")
         self.weather = WeatherClient(api_key)
         
-        # Hardcoded default coordinates for major cities; can be extended via Excel
-        self.city_coords = {
-            "Cairo": (30.0444, 31.2357), "Alexandria": (31.2001, 29.9187), "Giza": (30.0131, 31.2089),
-            "Hurghada": (27.2579, 33.8116), "Sharm El-Sheikh": (27.9158, 34.3299), "Luxor": (25.6872, 32.6396),
-            "Aswan": (24.0889, 32.8998), "Marsa Alam": (25.0657, 34.8914), "Arish": (31.1316, 33.8032),
-            "Taba": (29.4936, 34.8914), "Sohag": (26.557, 31.6948), "Asyut": (27.1783, 31.1859),
-            "Borg El Arab": (30.9167, 29.6667), "Port Said": (31.2565, 32.2841), "Suez": (29.9668, 32.5498),
-            "Damietta": (31.4175, 31.8144), "Safaga": (26.7297, 33.9365), "Quseir": (26.1038, 34.276),
-            "Nuweiba": (28.9971, 34.6533), "Ras Gharib": (28.3597, 33.075), "Ain Sokhna": (29.585, 32.323),
-            "Ismailia": (30.5965, 32.2715), "Marsa Matruh": (31.3543, 27.2373), "El Tor": (28.235, 33.622),
-            "Shibin El Kom": (30.55, 31.01), "Beni Suef": (29.0667, 31.0833), "Qena": (26.1667, 32.7167),
-            "Dakhla": (25.5, 29.1667), "Kharga": (25.44, 30.55), "Baltim": (31.5333, 31.0833),
-            "Tanta": (30.7865, 31.0004), "Mansoura": (31.0409, 31.3785)
-        }
+        # City coordinates will be loaded from the 'cities' Excel sheet
+        self.city_coords = {}
         # MultiDiGraph allows multiple edges (different transport modes) between same cities
         self.base_graph = nx.MultiDiGraph()
         self._load_data()
@@ -106,7 +94,8 @@ class MASRoutingEngine:
             if 'cities' in xl.sheet_names:
                 cities_df = pd.read_excel(xl, sheet_name='cities')
                 for _, r in cities_df.iterrows():
-                    self.city_coords[str(r['city_name']).strip()] = (r['lat'], r['lon'])
+                    city = str(r['city_name']).strip()
+                    self.city_coords[city] = (float(r['lat']), float(r['lon']))
 
             # Join routes with transport details and cost information using transport_id as key
             df = pd.merge(routes, trans, on='transport_id')
@@ -115,6 +104,11 @@ class MASRoutingEngine:
             # Populate the NetworkX graph with city nodes and transport edges
             for _, row in df.iterrows():
                 u, v = str(row['from']).strip(), str(row['to']).strip()
+                # Ensure all cities used in routes have at least fallback coordinates for weather fetching
+                for city in [u, v]:
+                    if city not in self.city_coords:
+                        self.city_coords[city] = (30.0, 31.0) # Default to central Egypt
+
                 self.base_graph.add_edge(u, v, cost=row['distance'] * row['cost_per_km kg'],
                                          time=row['distance'] / row['speed'], transport=row['type'])
         except Exception as e:
