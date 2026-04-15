@@ -130,6 +130,60 @@ class MASRoutingEngine:
         return reports
 
     # Calculates the optimal path between two cities based on method (time, cost, or constrained)
+    def solve_constrained_multistop(self, points, c_type, c_val):
+        is_time = "time" in (c_type or "").lower()
+        # Pre-fetch weather for all segment starts to avoid redundant calls in the loop
+        weather_data = {}
+        for p in points:
+            coords = self.city_coords.get(p, (30.0, 31.0))
+            w = self.weather.get(p, coords[0], coords[1])
+            weather_data[p] = (w['condition'].lower(), w['wind'])
+
+        # PQ: (objective, constraint, count, current_node, stop_index, path_history, steps_history)
+        counter = 0
+        pq = [(0.0, 0.0, counter, points[0], 0, [points[0]], [])]
+        min_cons = {}
+
+        while pq:
+            o, c, _, u, s_idx, path, steps = heapq.heappop(pq)
+            
+            # Handle reaching (possibly multiple) targets at the same node
+            while s_idx + 1 < len(points) and u == points[s_idx + 1]:
+                if s_idx + 1 == len(points) - 1:
+                    return path, steps, o if is_time else c, c if is_time else o
+                s_idx += 1
+
+            state = (u, s_idx)
+            if c >= min_cons.get(state, float('inf')): continue
+            min_cons[state] = c
+            
+            for v in self.base_graph.successors(u):
+                for edata in self.base_graph[u][v].values():
+                    # Weather logic for current segment
+                    curr_start = points[s_idx]
+                    cond, wind = weather_data[curr_start]
+                    
+                    eff_time = edata['time']
+                    if u == curr_start:
+                        mode = str(edata['transport']).lower()
+                        if "rain" in cond or "drizzle" in cond:
+                            if "plane" in mode: eff_time = 999999
+                            elif any(x in mode for x in ["car", "truck"]): eff_time *= 1.2
+                            elif "train" in mode: eff_time *= 1.1
+                        if "cloudy" in cond or "overcast" in cond:
+                            if "plane" in mode: eff_time *= 1.2
+                        if wind > 25 and "ship" in mode: eff_time *= 1.3
+                    
+                    e_obj = edata['cost'] if is_time else eff_time
+                    e_cons = eff_time if is_time else edata['cost']
+                    nc = c + e_cons
+                    if nc <= c_val:
+                        counter += 1
+                        new_step = {"from_city": u, "to_city": v, "transport": edata['transport'],
+                                    "cost": round(edata['cost'], 2), "time": round(eff_time, 2)}
+                        heapq.heappush(pq, (o + e_obj, nc, counter, v, s_idx, path + [v], steps + [new_step]))
+        raise HTTPException(404, f"No route found under global limit {c_val}")
+
     def solve_segment(self, start, end, method, c_type, c_val):
         # Fetch weather for the start city to determine transport penalties (e.g., rain slows trucks)
         coords = self.city_coords.get(start, (30.0, 31.0))
@@ -154,11 +208,12 @@ class MASRoutingEngine:
         # --- OPTION 1: CONSTRAINED SHORTEST PATH (e.g., Min Cost where Time <= X) ---
         if method == "constrained" and c_val:
             is_time = "time" in (c_type or "").lower()
-            # Priority Queue format: (objective_value, constraint_value, current_node, path_history, steps_history)
-            pq = [(0.0, 0.0, start, [start], [])]
+            # Priority Queue format: (objective_value, constraint_value, counter, current_node, path_history, steps_history)
+            counter = 0
+            pq = [(0.0, 0.0, counter, start, [start], [])]
             min_cons = {n: float('inf') for n in self.base_graph.nodes()}
             while pq:
-                o, c, u, path, steps = heapq.heappop(pq)
+                o, c, _, u, path, steps = heapq.heappop(pq)
                 # Standard Dijkstra optimization: skip if we've reached this node with a better constraint value
                 if c >= min_cons.get(u, float('inf')): continue
                 min_cons[u] = c
@@ -173,9 +228,10 @@ class MASRoutingEngine:
                         nc = c + e_cons
                         # Only push to queue if the constraint (e.g., total time) is still within bounds
                         if nc <= c_val and nc < min_cons.get(v, float('inf')):
+                            counter += 1
                             new_step = {"from_city": u, "to_city": v, "transport": edata['transport'],
                                         "cost": round(edata['cost'], 2), "time": round(eff_time, 2)}
-                            heapq.heappush(pq, (o + e_obj, nc, v, path + [v], steps + [new_step]))
+                            heapq.heappush(pq, (o + e_obj, nc, counter, v, path + [v], steps + [new_step]))
             raise HTTPException(404, f"No route {start}->{end} under limit")
 
         # --- OPTION 2: DIJKSTRA (Simple Time or Cost Optimization) ---
@@ -235,6 +291,18 @@ class RouteRequest(BaseModel):
 def find_route(request: RouteRequest):
     stops = [s.strip() for s in (request.stops or []) if s.strip()]
     points = [request.start.strip()] + stops + [request.end.strip()]
+    
+    if request.method == "constrained" and request.constraint_value:
+        p, d, c, t = ENGINE.solve_constrained_multistop(points, request.constraint_type, request.constraint_value)
+        return {
+            "route": p,
+            "details": d,
+            "total_cost": round(c, 2),
+            "total_time": round(t, 2),
+            "method_used": request.method,
+            "weather_reports": ENGINE.get_path_weather(p)
+        }
+
     final_path, final_details = [], []
     total_cost, total_time = 0.0, 0.0
     
