@@ -52,7 +52,6 @@
             flex: 1;
         }
 
-        /* Sidebar Projects */
         .sidebar {
             background: white;
             border-radius: var(--radius-large);
@@ -87,8 +86,6 @@
         }
         .project-item:hover .delete-btn { opacity: 1; }
 
-        /* Calculator Content */
-        .content { }
         .calc-container {
             background: var(--card-bg);
             padding: 40px;
@@ -156,6 +153,15 @@
         .diff-plus { background: #ffebeb; color: #d93025; }
         .diff-minus { background: #e6f4ea; color: #1e8e3e; }
 
+        .weather-box {
+            background: #f0f9ff;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-size: 0.85rem;
+            border-left: 4px solid #0ea5e9;
+        }
+
         .step { padding: 10px; border-bottom: 1px solid #eee; font-size: 0.9rem; }
     </style>
 </head>
@@ -163,83 +169,69 @@
 
     <header>
         <div class="logo">MAS logistics</div>
-        <div style="color:white; font-weight: bold;">Advanced Route Planner</div>
+        <div style="color:white; font-weight: bold;">Weather-Aware Routing</div>
     </header>
 
     <div class="main-layout">
-        <!-- Sidebar for Projects -->
         <aside class="sidebar">
             <h3>📂 Проекты</h3>
-            <div id="project-list" class="project-list">
-                <p style="color:var(--text-light); font-style: italic;">Нет сохраненных проектов</p>
-            </div>
+            <div id="project-list" class="project-list"></div>
             <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
-            <button class="btn btn-success" style="width: 100%;" onclick="saveAsProject()">💾 Сохранить как проект</button>
+            <button class="btn btn-success" style="width: 100%;" onclick="saveAsProject()">💾 Сохранить проект</button>
         </aside>
 
-        <!-- Main Calculator -->
         <main class="content">
             <div class="calc-container">
                 <h2 style="margin-bottom: 25px;">Маршрутизатор</h2>
-
                 <div class="form-group">
-                    <label>Точка А (Начало):</label>
+                    <label>Точка А:</label>
                     <input type="text" id="startCity" value="Cairo">
                 </div>
-
                 <div id="stops-container"></div>
                 <button class="btn btn-add" onclick="addStop()">+ Добавить остановку</button>
-
                 <div class="form-group">
-                    <label>Точка Б (Конец):</label>
+                    <label>Точка Б:</label>
                     <input type="text" id="endCity" value="Alexandria">
                 </div>
-
                 <div style="display: flex; gap: 15px; margin-bottom: 20px;">
                     <div style="flex: 2;">
                         <label>Метод 1:</label>
                         <select id="method1" onchange="toggleConstraints(1)">
-                            <option value="multi_criteria">Оптимальный (Баланс)</option>
-                            <option value="dijkstra_cost">Дешевле всего</option>
-                            <option value="dijkstra_time">Быстрее всего</option>
-                            <option value="constrained">С ограничениями</option>
+                            <option value="multi_criteria">Оптимальный</option>
+                            <option value="dijkstra_cost">Дешевле</option>
+                            <option value="dijkstra_time">Быстрее</option>
+                            <option value="constrained">Ограничения</option>
                         </select>
                     </div>
                     <div style="flex: 1; display: flex; align-items: flex-end;">
                         <button class="btn btn-secondary" id="compare-toggle" onclick="toggleCompareMode()" style="width: 100%;">Сравнить</button>
                     </div>
                 </div>
-
                 <div id="constraint-1" style="display:none; background:#f0f7ff; padding: 15px; border-radius: 12px; margin-bottom: 20px;">
-                    <label>Ограничение:</label>
                     <div style="display:flex; gap:10px;">
                         <select id="cType1" style="width: 130px;"><option value="time">Время</option><option value="cost">Цена</option></select>
                         <input type="number" id="cVal1" placeholder="Лимит...">
                     </div>
                 </div>
-
                 <div id="compare-section">
                     <div class="form-group">
                         <label>Метод 2:</label>
                         <select id="method2" onchange="toggleConstraints(2)">
-                            <option value="dijkstra_time">Быстрее всего</option>
-                            <option value="dijkstra_cost">Дешевле всего</option>
-                            <option value="multi_criteria">Оптимальный (Баланс)</option>
-                            <option value="constrained">С ограничениями</option>
+                            <option value="dijkstra_time">Быстрее</option>
+                            <option value="dijkstra_cost">Дешевле</option>
+                            <option value="multi_criteria">Оптимальный</option>
+                            <option value="constrained">Ограничения</option>
                         </select>
                     </div>
                     <div id="constraint-2" style="display:none; background:#f0f7ff; padding: 15px; border-radius: 12px;">
-                        <label>Ограничение 2:</label>
                         <div style="display:flex; gap:10px;">
                             <select id="cType2" style="width: 130px;"><option value="time">Время</option><option value="cost">Цена</option></select>
                             <input type="number" id="cVal2" placeholder="Лимит...">
                         </div>
                     </div>
                 </div>
-
-                <button class="btn btn-primary" style="width: 100%; margin-top: 10px; font-size: 1.1rem;" onclick="processRoute()">🚀 Найти маршрут</button>
+                <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="processRoute()">🚀 Найти маршрут</button>
             </div>
-
             <div id="results-area" class="results-wrapper"></div>
         </main>
     </div>
@@ -249,7 +241,6 @@
         let lastCalculatedResult = null;
         const API_BASE = "http://127.0.0.1:8000/api";
 
-        // Initial Load
         document.addEventListener('DOMContentLoaded', loadProjects);
 
         async function loadProjects() {
@@ -257,98 +248,76 @@
                 const res = await fetch(`${API_BASE}/projects`);
                 const projects = await res.json();
                 const list = document.getElementById('project-list');
-                
-                if (Object.keys(projects).length === 0) {
-                    list.innerHTML = '<p style="color:var(--text-light); font-style: italic;">Нет сохраненных проектов</p>';
-                    return;
-                }
-
                 list.innerHTML = Object.values(projects).map(p => `
                     <div class="project-item" onclick="applyProject('${p.id}')">
                         <span class="name">${p.name}</span>
                         <span class="route-info">${p.start} ➔ ${p.end}</span>
                         <span class="delete-btn" onclick="deleteProject(event, '${p.id}')">✕</span>
                     </div>
-                `).join('');
-            } catch (e) { console.error("Error loading projects", e); }
+                `).join('') || '<p style="font-style:italic">Нет проектов</p>';
+            } catch (e) { console.error(e); }
         }
 
         async function saveAsProject() {
-            const name = prompt("Введите название проекта:");
+            const name = prompt("Название проекта:");
             if (!name) return;
-
             const project = {
-                name: name,
+                name,
                 start: document.getElementById('startCity').value,
                 end: document.getElementById('endCity').value,
-                stops: Array.from(document.querySelectorAll('.stop-input')).map(i => i.value).filter(v => v),
+                stops: Array.from(document.querySelectorAll('.stop-input')).map(i => i.value),
                 method: document.getElementById('method1').value,
-                last_result: lastCalculatedResult // Сохраняем последний расчет
+                last_result: lastCalculatedResult
             };
-
             if (project.method === 'constrained') {
                 project.constraint_type = document.getElementById('cType1').value;
                 project.constraint_value = parseFloat(document.getElementById('cVal1').value);
             }
-
             await fetch(`${API_BASE}/projects`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(project)
             });
             loadProjects();
-            alert("Проект сохранен!");
         }
 
         async function applyProject(id) {
             const res = await fetch(`${API_BASE}/projects`);
             const projects = await res.json();
             const p = projects[id];
-            if (!p) return;
-
-            // Заполняем форму
             document.getElementById('startCity').value = p.start;
             document.getElementById('endCity').value = p.end;
-            
             const container = document.getElementById('stops-container');
             container.innerHTML = '';
-            p.stops.forEach(stop => {
+            p.stops.forEach(s => {
                 const div = document.createElement('div');
                 div.className = 'stop-item';
-                div.innerHTML = `<input type="text" class="stop-input" value="${stop}"><span class="btn-remove" onclick="this.parentElement.remove()">✕</span>`;
+                div.innerHTML = `<input type="text" class="stop-input" value="${s}"><span class="btn-remove" onclick="this.parentElement.remove()">✕</span>`;
                 container.appendChild(div);
             });
-
             document.getElementById('method1').value = p.method;
             toggleConstraints(1);
             if (p.method === 'constrained') {
                 document.getElementById('cType1').value = p.constraint_type;
                 document.getElementById('cVal1').value = p.constraint_value;
             }
-
-            // Если есть сохраненный результат - показываем его сразу
-            if (p.last_result) {
-                lastCalculatedResult = p.last_result;
-                displayResults(p.last_result, null);
-            } else {
-                // Иначе запускаем поиск автоматически
-                processRoute();
-            }
+            if (p.last_result) displayResults(p.last_result, null);
+            else processRoute();
         }
 
         async function deleteProject(e, id) {
             e.stopPropagation();
-            if (!confirm("Удалить проект?")) return;
-            await fetch(`${API_BASE}/projects/${id}`, { method: 'DELETE' });
-            loadProjects();
+            if (confirm("Удалить?")) {
+                await fetch(`${API_BASE}/projects/${id}`, { method: 'DELETE' });
+                loadProjects();
+            }
         }
 
         function addStop() {
-            const container = document.getElementById('stops-container');
             const div = document.createElement('div');
             div.className = 'stop-item';
             div.innerHTML = `<input type="text" class="stop-input" placeholder="Город..."><span class="btn-remove" onclick="this.parentElement.remove()">✕</span>`;
-            container.appendChild(div);
+            document.getElementById('stops-container').appendChild(div);
         }
 
         function toggleCompareMode() {
@@ -358,41 +327,31 @@
         }
 
         function toggleConstraints(num) {
-            const method = document.getElementById('method' + num).value;
-            document.getElementById('constraint-' + num).style.display = (method === 'constrained') ? 'block' : 'none';
-        }
-
-        async function fetchRoute(num) {
-            const body = {
-                start: document.getElementById('startCity').value,
-                end: document.getElementById('endCity').value,
-                stops: Array.from(document.querySelectorAll('.stop-input')).map(i => i.value).filter(v => v),
-                method: document.getElementById('method' + num).value
-            };
-            if (body.method === 'constrained') {
-                body.constraint_type = document.getElementById('cType1').value;
-                body.constraint_value = parseFloat(document.getElementById('cVal1').value);
-            }
-            const res = await fetch(`${API_BASE}/find_route`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            return res.json();
+            document.getElementById('constraint-' + num).style.display = 
+                document.getElementById('method' + num).value === 'constrained' ? 'block' : 'none';
         }
 
         async function processRoute() {
             const area = document.getElementById('results-area');
-            area.innerHTML = "<p>Расчет...</p>";
+            area.innerHTML = "<p>Загрузка...</p>";
             try {
-                const r1 = await fetchRoute(1);
-                lastCalculatedResult = r1; // Запоминаем для сохранения
-                
-                let r2 = null;
-                if (compareMode) r2 = await fetchRoute(2);
-                
+                const getBody = (n) => ({
+                    start: document.getElementById('startCity').value,
+                    end: document.getElementById('endCity').value,
+                    stops: Array.from(document.querySelectorAll('.stop-input')).map(i => i.value),
+                    method: document.getElementById('method' + n).value,
+                    constraint_type: document.getElementById('cType' + n).value,
+                    constraint_value: parseFloat(document.getElementById('cVal' + n).value)
+                });
+                const r1 = await (await fetch(`${API_BASE}/find_route`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(getBody(1))
+                })).json();
+                lastCalculatedResult = r1;
+                let r2 = compareMode ? await (await fetch(`${API_BASE}/find_route`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(getBody(2))
+                })).json() : null;
                 displayResults(r1, r2);
-            } catch (e) { area.innerHTML = `<p style="color:red">Ошибка: ${e.message}</p>`; }
+            } catch (e) { area.innerHTML = `<p style="color:red">${e.message}</p>`; }
         }
 
         function displayResults(r1, r2) {
@@ -402,32 +361,39 @@
         }
 
         function renderCard(data, title, other) {
-            if (data.detail) return `<div class="result-card" style="color:red">Ошибка: ${data.detail}</div>`;
-            
+            if (data.detail) return `<div class="result-card" style="color:red">${data.detail}</div>`;
             let diffs = "";
             if (other && !other.detail) {
                 const cD = (data.total_cost - other.total_cost).toFixed(1);
                 const tD = (data.total_time - other.total_time).toFixed(1);
-                diffs = `
-                    <div style="margin: 10px 0;">
-                        <span class="diff-badge ${cD <= 0 ? 'diff-minus' : 'diff-plus'}">${cD <= 0 ? '' : '+'}${cD} у.е.</span>
-                        <span class="diff-badge ${tD <= 0 ? 'diff-minus' : 'diff-plus'}">${tD <= 0 ? '' : '+'}${tD} ч.</span>
-                    </div>`;
+                diffs = `<div style="margin-bottom:10px">
+                    <span class="diff-badge ${cD<=0?'diff-minus':'diff-plus'}">${cD<=0?'':'+'}${cD} у.е.</span>
+                    <span class="diff-badge ${tD<=0?'diff-minus':'diff-plus'}">${tD<=0?'':'+'}${tD} ч.</span>
+                </div>`;
             }
 
-            return `
-                <div class="result-card">
-                    <h4>${title} (${data.method_used})</h4>
-                    ${diffs}
-                    <div style="font-size: 1.3rem; font-weight: bold; margin: 10px 0;">${data.total_cost} у.е. | ${data.total_time} ч.</div>
-                    <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px;">${data.route.join(' → ')}</p>
-                    <div class="steps-list">${data.details.map(s => `
-                        <div class="step">
-                            <b>${s.from_city} → ${s.to_city}</b> (${s.transport})<br>
-                            ${s.cost} у.е. | ${s.time} ч.
-                        </div>`).join('')}
+            // Using weather_reports from backend
+            const routeWithWeather = data.route.map(city => {
+                const weather = data.weather_reports[city] || '...';
+                return `<b>${city}</b> <span style="color:#0ea5e9; font-size:0.8rem;">(${weather})</span>`;
+            }).join(' → ');
+
+            return `<div class="result-card">
+                <h4>${title} (${data.method_used})</h4>
+                ${diffs}
+                <div style="font-size:1.3rem;font-weight:bold;margin:10px 0">${data.total_cost} у.е. | ${data.total_time} ч.</div>
+                
+                <div style="background:#f8fafc; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #e2e8f0; line-height:1.8;">
+                    ${routeWithWeather}
+                </div>
+
+                <div class="steps-list">${data.details.map(s => `
+                    <div class="step">
+                        <b>${s.from_city} → ${s.to_city}</b> (${s.transport})<br>
+                        <span style="color:#64748b;">${s.cost} у.е. | ${s.time} ч.</span>
                     </div>
-                </div>`;
+                `).join('')}</div>
+            </div>`;
         }
     </script>
 </body>
