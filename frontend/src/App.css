@@ -1,0 +1,156 @@
+.app-container {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.sidebar {
+  background: white;
+  padding: 30px;
+  border-right: 1px solid #eee;
+  box-shadow: 2px 0 10px rgba(0,0,0,0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.main-content {
+  padding: 40px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.header {
+  border-radius: var(--radius-large);
+  padding: 40px;
+  color: white;
+  background: linear-gradient(135deg, var(--airy-blue) 0%, #8AB8D4 100%), 
+              url('https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&q=80&w=1000') center/cover;
+  background-blend-mode: multiply;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 2.5rem;
+  font-weight: 800;
+}
+
+.calc-card {
+  background: var(--card-bg);
+  padding: 40px;
+  border-radius: var(--radius-large);
+  box-shadow: var(--shadow);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  margin-bottom: 30px;
+}
+
+.results-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 30px;
+}
+
+.results-grid.compare {
+  grid-template-columns: 1fr 1fr;
+}
+
+.btn {
+  padding: 14px 25px;
+  border: none;
+  border-radius: 50px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.btn-primary {
+  background: var(--airy-blue);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--airy-blue-hover);
+}
+
+.btn-secondary {
+  background: #F0F4F8;
+  color: var(--text-dark);
+}
+
+.btn-success {
+  background: #2DCE89;
+  color: white;
+}
+
+.project-item {
+  padding: 15px;
+  background: var(--bg-cream);
+  border-radius: var(--radius-medium);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: 0.2s;
+  position: relative;
+}
+
+.project-item:hover {
+  border-color: var(--airy-blue);
+  background: white;
+}
+
+.project-item .delete-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: #ff4d4f;
+  opacity: 0.3;
+}
+
+.project-item:hover .delete-btn {
+  opacity: 1;
+}
+
+.result-card {
+  background: white;
+  padding: 30px;
+  border-radius: var(--radius-large);
+  box-shadow: var(--shadow);
+  border: 1px solid #f0f0f0;
+}
+
+.weather-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: #EBF8FF;
+  color: #2B6CB0;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  margin-left: 10px;
+}
+
+.route-step {
+  padding: 15px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.route-step:last-child {
+  border-bottom: none;
+}
