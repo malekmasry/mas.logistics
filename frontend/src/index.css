@@ -1,18 +1,22 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
+
 :root {
   --bg-cream: #FDFCF0;
-  --airy-blue: #A9CDE5;
-  --airy-blue-hover: #8AB8D4;
-  --text-dark: #2C3E50;
+  --accent-deep: #2D3A30; /* Deep Moss Green */
+  --accent-soft: #7C897D;
+  --accent-warm: #C4A484; /* Soft Terracotta/Tan */
+  --text-dark: #1A1C19;
   --text-light: #5A6A7A;
   --card-bg: #FFFFFF;
-  --shadow: 0 12px 35px rgba(0, 0, 0, 0.05);
-  --radius-large: 24px;
-  --radius-medium: 12px;
-  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
+  --shadow: 0 20px 40px rgba(45, 58, 48, 0.08);
+  --radius-large: 32px;
+  --radius-medium: 16px;
+  
+  font-family: 'Inter', sans-serif;
+  line-height: 1.6;
   font-weight: 400;
 
-  color-scheme: light dark;
+  color-scheme: light;
   color: var(--text-dark);
   background-color: var(--bg-cream);
 
@@ -24,10 +28,37 @@
 
 body {
   margin: 0;
-  display: flex;
+  display: block;
   min-width: 320px;
   min-height: 100vh;
   background-color: var(--bg-cream);
+}
+
+h1, h2, h3, .brand-font {
+  font-family: 'Playfair Display', serif;
+}
+
+#root {
+  width: 100%;
+}
+
+* {
+  box-sizing: border-box;
+  scroll-behavior: smooth;
+}
+
+.fade-in-section {
+  opacity: 0;
+  transform: translateY(30px);
+  visibility: hidden;
+  transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+  will-change: opacity, transform;
+}
+
+.fade-in-section.is-visible {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
 }
 
 #root {
