@@ -93,4 +93,4 @@ The frontend features a custom-built, interactive **City Wheel Picker** that pro
 ---
 
 ## 📝 License
-Created by [Malek Masry](https://github.com/malekmasry). This project is part of a Multi-Agent Systems research application.
+Created by [Malek Elbayoumy](https://github.com/malekmasry). This project is part of a Multi-Agent Systems research application.
