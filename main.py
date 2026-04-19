@@ -318,6 +318,13 @@ class RouteRequest(BaseModel):
     constraint_value: Optional[float] = None
 
 # Primary endpoint to find an end-to-end route, handling any intermediate stops
+@app.get("/api/cities_data")
+def get_cities_data():
+    return {
+        "cities": sorted(list(ENGINE.city_coords.keys())),
+        "coords": ENGINE.city_coords
+    }
+
 @app.post("/api/find_route")
 def find_route(request: RouteRequest):
     stops = [s.strip() for s in (request.stops or []) if s.strip()]
