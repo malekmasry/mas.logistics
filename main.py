@@ -117,11 +117,11 @@ class MASRoutingEngine:
                                          mass_min=float(row['mass(min)(kg)']),
                                          unload_h=float(row['cargo unload (h)']),
                                          vol_max=float(row['volume (max)(m3)']),
-                                         fuel_cons=float(row['fuel_cons']),
-                                         start_cost=float(row['start_cost']),
-                                         fuel_cost=float(row['fuel_cost']),
+                                         fuel_cons=float(row['fuel consumption (l/km)']),
+                                         start_cost=float(row['fixed start cost(EGP)']),
+                                         fuel_cost=float(row['fuelcost(egp)']),
                                          sensitivity=float(row['sensitivity']),
-                                         transport=row['transport'])
+                                         transport=row['type'])
         except Exception as e:
             print(f"Engine data load failed: {e}")
 
@@ -264,7 +264,9 @@ class MASRoutingEngine:
                 if c >= min_cons.get(u, float('inf')): continue
                 min_cons[u] = c
                 
-                if u == end: return path, steps, o if is_time else c, c if is_time else o
+                if u == end:
+                    total_co2 = sum(s['co2'] for s in steps)
+                    return path, steps, o if is_time else c, c if is_time else o, total_co2
                 
                 for v in self.base_graph.successors(u):
                     for edata in self.base_graph[u][v].values():
@@ -299,7 +301,7 @@ class MASRoutingEngine:
             # 3. Calculate a weight that balances the specific cost/time trade-off for this pair
             cost_diff = abs(c_f - c_c)
             time_diff = abs(t_c - t_f)
-            if time_diff < 0.001: return p_c, s_c, c_c, t_c
+            if time_diff < 0.001: return p_c, s_c, c_c, t_c, co2_c
             
             # Refinement: Use a market-informed Value of Time (VOT).
             # We cap the balanced_weight at a reasonable multiple of the base transport cost per hour.
