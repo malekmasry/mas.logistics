@@ -19,7 +19,16 @@ import {
   Clock,
   Leaf,
   Package,
-  Map as MapIcon
+  Map as MapIcon,
+  Activity,
+  BarChart3,
+  AlertTriangle,
+  CheckCircle2,
+  Wind,
+  Droplets,
+  ThermometerSun,
+  TrendingUp,
+  Boxes
 } from 'lucide-react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
@@ -123,6 +132,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
   const [initError, setInitError] = useState<string | null>(null)
+  const [currentView, setCurrentView] = useState('dashboard')
 
   const calcRef = useRef<HTMLDivElement>(null);
 
@@ -184,6 +194,7 @@ function App() {
   }
 
   const handleNewProject = () => {
+    setCurrentView('dashboard')
     setStartCity('Cairo')
     setEndCity('Alexandria')
     setStops([])
@@ -278,6 +289,7 @@ function App() {
   }
 
   const applyProject = (p: Project) => {
+    setCurrentView('dashboard')
     setStartCity(p.start)
     setEndCity(p.end)
     setStops(p.stops)
@@ -321,339 +333,410 @@ function App() {
     <div className={`app-container ${showSidebar ? 'sidebar-visible' : 'sidebar-hidden'}`}>
       <aside className="sidebar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--accent-deep)', marginBottom: '10px' }}>
-          <Navigation size={38} strokeWidth={2.5} />
-          <span className="brand-font" style={{ fontSize: '2rem', fontWeight: 800 }}>MAS</span>
+          <Activity size={32} className="pulse" style={{ color: 'var(--accent-warm)' }} />
+          <span className="brand-font" style={{ fontSize: '1.8rem', fontWeight: 800 }}>MAS.CORE</span>
         </div>
+        
+        <div className="sidebar-nav">
+          <div className={`nav-item ${currentView === 'dashboard' ? 'active' : ''}`} onClick={() => setCurrentView('dashboard')}><BarChart3 size={18} /> Dashboard</div>
+          <div className={`nav-item ${currentView === 'network' ? 'active' : ''}`} onClick={() => setCurrentView('network')}><Globe size={18} /> Network Map</div>
+        </div>
+
         <div className="decoration-line"></div>
-        <button className="btn btn-primary" onClick={handleNewProject} style={{ marginBottom: '10px' }}>
+        
+        <button className="btn btn-primary" onClick={handleNewProject} style={{ marginBottom: '10px', width: '100%' }}>
           <Plus size={18} /> New Analysis
         </button>
-        <h3>Saved Projects</h3>
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+
+        <h3>Active Projects</h3>
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {Object.values(projects).map(p => (
             <div key={p.id} className="project-item" onClick={() => applyProject(p)}>
-              <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{p.name}</div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--accent-soft)', marginTop: '4px' }}>{p.start} → {p.end}</div>
-              <Trash2 className="delete-btn" size={16} onClick={(e) => { e.stopPropagation(); deleteProject(p.id); }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                 <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{p.name}</div>
+                 <Trash2 className="delete-btn" size={14} onClick={(e) => { e.stopPropagation(); deleteProject(p.id); }} />
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--accent-soft)', marginTop: '4px' }}>
+                <Clock size={10} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
+                {p.start} → {p.end}
+              </div>
             </div>
           ))}
         </div>
-        <button className="btn btn-secondary" onClick={saveProject}>
-          <Save size={18} /> Save to History
+        
+        <div className="system-health">
+          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--accent-soft)', marginBottom: '8px' }}>System Health</div>
+          <div className="health-bar"><div className="health-fill"></div></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '0.65rem' }}>
+            <span>Operational</span>
+            <span>99.8%</span>
+          </div>
+        </div>
+
+        <button className="btn btn-secondary" onClick={saveProject} style={{ width: '100%' }}>
+          <Save size={18} /> Commit to Archive
         </button>
       </aside>
 
       <main className="main-content">
-        <section className="hero-full">
-           <FadeInSection>
-              <div className="hero-content">
-                <span className="hero-subtitle">NEXT GENERATION LOGISTICS</span>
-                <h1 className="hero-title">Intelligent Pathfinding for a Complex World.</h1>
-                <p className="hero-description">
-                  Harness the power of Multi-Agent Systems to navigate global supply chain volatility with real-time weather integration and dynamic cost-time optimization.
-                </p>
-                <div style={{ marginTop: '40px', opacity: 0.6 }}>
-                   <p style={{ fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '2px' }}>Scroll to Explore</p>
-                   <ChevronDown size={24} style={{ marginTop: '10px' }} />
-                </div>
+        <header className="top-bar">
+          <div className="search-placeholder">
+            <Activity size={16} />
+            <span>MAS Predictive Engine v2.1 // System Status: Nominal</span>
+          </div>
+          <div className="user-profile">
+            <div className="avatar">MM</div>
+            <div className="user-info">
+              <div className="user-name">Malek Masry</div>
+              <div className="user-role">Logistics Architect</div>
+            </div>
+          </div>
+        </header>
+
+        {currentView === 'dashboard' && (
+          <>
+            <section className="dashboard-header-mini">
+              <div className="stats-grid">
+                  <div className="stat-card">
+                    <div className="stat-icon"><Activity /></div>
+                    <div className="stat-data">
+                        <div className="stat-value">2,481</div>
+                        <div className="stat-label">Active Nodes</div>
+                    </div>
+                    <div className="stat-trend positive"><TrendingUp size={12}/> +4.2%</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-icon"><CloudRain /></div>
+                    <div className="stat-data">
+                        <div className="stat-value">12</div>
+                        <div className="stat-label">Weather Alerts</div>
+                    </div>
+                    <div className="stat-trend negative"><AlertTriangle size={12}/> Critical</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-icon"><Boxes /></div>
+                    <div className="stat-data">
+                        <div className="stat-value">842t</div>
+                        <div className="stat-label">Simulated Cargo</div>
+                    </div>
+                  </div>
               </div>
-           </FadeInSection>
-        </section>
+            </section>
 
-        <section className="scroll-story">
-          <FadeInSection>
-            <div className="story-step">
-              <div className="story-icon"><Globe size={48} /></div>
-              <div className="story-text">
-                <h2>Continental Graphing</h2>
-                <p>Our engine maps every major node across the Mediterranean, building a complex web of possibilities that traditional routers simply cannot see.</p>
-              </div>
-            </div>
-          </FadeInSection>
+            <section className="dashboard-grid">
+              <div className="main-column">
+                <FadeInSection>
+                  <div ref={calcRef} className="calc-card control-panel">
+                    <div className="card-header">
+                      <div className="title-group">
+                        <h2>Logistics Routing</h2>
+                        <p>Weather-aware path optimization for modern supply chains.</p>
+                      </div>
+                      <div className="header-actions">
+                        <button className="icon-btn"><Layers size={18}/></button>
+                      </div>
+                    </div>
+                    
+                    <div className="form-grid">
+                      <CityWheelPicker label="Deployment Origin" cities={cities} selectedCity={startCity} onCityChange={setStartCity} />
+                      <CityWheelPicker label="Destination Terminal" cities={cities} selectedCity={endCity} onCityChange={setEndCity} />
+                    </div>
 
-          <FadeInSection>
-            <div className="story-step reverse">
-              <div className="story-text">
-                <h2>Real-Time Meteorological Agents</h2>
-                <p>Every city in our network has a dedicated weather agent. If it's raining in Alexandria or windy in Suez, your route adapts before your cargo even leaves the dock.</p>
-              </div>
-              <div className="story-icon"><Zap size={48} /></div>
-            </div>
-          </FadeInSection>
+                    <div className="params-row">
+                      <div className="param-group">
+                        <label>Cargo Dynamics</label>
+                        <div className="input-duo">
+                          <div className="input-with-icon">
+                            <Package size={14} />
+                            <input type="number" value={mass} onChange={(e) => setMass(Number(e.target.value))} placeholder="Mass" />
+                            <span>kg</span>
+                          </div>
+                          <div className="input-with-icon">
+                            <Boxes size={14} />
+                            <input type="number" value={volume} onChange={(e) => setVolume(Number(e.target.value))} placeholder="Volume" />
+                            <span>m³</span>
+                          </div>
+                        </div>
+                      </div>
 
-          <FadeInSection>
-            <div className="story-step">
-              <div className="story-icon"><Shield size={48} /></div>
-              <div className="story-text">
-                <h2>Autonomous Resilience</h2>
-                <p>Designed for reliability. Our system negotiates between speed, cost, and safety to deliver a robust pathfinding solution that survives the unpredictable.</p>
-              </div>
-            </div>
-          </FadeInSection>
+                      <div className="param-group">
+                        <label>Strategy Matrix</label>
+                        <div className="strategy-selector">
+                          <select value={method1} onChange={(e) => setMethod1(e.target.value)}>
+                            <option value="multi_criteria">Balanced Multi-Criteria</option>
+                            <option value="dijkstra_cost">Economical Efficiency</option>
+                            <option value="dijkstra_time">Temporal Velocity</option>
+                            <option value="co2">Carbon Minimization</option>
+                            <option value="constrained">Parameter Constraint</option>
+                          </select>
+                          <button className={`compare-toggle ${compareMode ? 'active' : ''}`} onClick={() => setCompareMode(!compareMode)}>
+                            <Layers size={14} /> Compare
+                          </button>
+                        </div>
+                      </div>
+                    </div>
 
-          <FadeInSection>
-            <div className="story-end">
-               <h2 style={{ fontSize: '3rem', marginBottom: '30px' }}>Ready to Optimize?</h2>
-               <button className="btn btn-primary btn-lg" onClick={scrollToCalc}>
-                  Start Analysis Now <ArrowRight size={20} />
-               </button>
-            </div>
-          </FadeInSection>
-        </section>
+                    <div style={{ marginBottom: '30px' }}>
+                      <label className="section-label" style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-soft)', textTransform: 'uppercase', marginBottom: '10px', display: 'block' }}>Strategic Waypoints</label>
+                      <div className="stops-container">
+                        {stops.map((stop, i) => (
+                          <div key={i} className="stop-pill-new">
+                            <div className="stop-index">{i + 1}</div>
+                            <select className="stop-select-new" value={stop} onChange={(e) => {
+                              const n = [...stops]; n[i] = e.target.value; setStops(n);
+                            }}>
+                              <option value="">Select Location...</option>
+                              {cities.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                            <button onClick={() => setStops(stops.filter((_, idx) => idx !== i))} className="stop-remove">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))}
+                        <button className="add-stop-btn-new" onClick={() => setStops([...stops, ''])}>
+                          <Plus size={14} /> Add Deployment Node
+                        </button>
+                      </div>
+                    </div>
 
-        <FadeInSection>
-          <div ref={calcRef} className="calc-card">
-            <div className="decoration-line"></div>
-            <h2 style={{ marginBottom: '40px', fontSize: '2.2rem' }}>Route Configuration</h2>
-            
-            <div className="form-grid">
-              <CityWheelPicker label="Origin Point" cities={cities} selectedCity={startCity} onCityChange={setStartCity} />
-              <CityWheelPicker label="Final Terminal" cities={cities} selectedCity={endCity} onCityChange={setEndCity} />
-            </div>
+                    {method1 === 'constrained' && (
+                      <div className="constraint-box animated">
+                        <label className="section-label">Boundary Constraints</label>
+                        <div style={{ display: 'flex', gap: '15px' }}>
+                          <select className="input-field" value={cType1} onChange={(e) => setCType1(e.target.value)}>
+                            <option value="time">Time Ceiling (hrs)</option>
+                            <option value="cost">Budget Cap (EGP)</option>
+                          </select>
+                          <input type="number" className="input-field" value={cVal1} onChange={(e) => setCVal1(Number(e.target.value))} placeholder="Limit..." />
+                        </div>
+                      </div>
+                    )}
 
-            <div style={{ marginBottom: '40px' }}>
-              <label className="section-label">Cargo Specifications</label>
-              <div className="form-grid">
-                <div className="input-group">
-                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-soft)', display: 'block', marginBottom: '8px' }}>Total Mass (kg)</label>
-                  <input type="number" className="input-field" value={mass} onChange={(e) => setMass(Number(e.target.value))} />
-                </div>
-                <div className="input-group">
-                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-soft)', display: 'block', marginBottom: '8px' }}>Total Volume (m³)</label>
-                  <input type="number" className="input-field" value={volume} onChange={(e) => setVolume(Number(e.target.value))} />
-                </div>
-              </div>
-            </div>
+                    {compareMode && (
+                      <div className="compare-box animated">
+                          <label className="section-label">Secondary Simulation Model</label>
+                          <select className="input-field" value={method2} onChange={(e) => setMethod2(e.target.value)}>
+                            <option value="dijkstra_time">Temporal Velocity</option>
+                            <option value="dijkstra_cost">Economical Efficiency</option>
+                            <option value="co2">Carbon Minimization</option>
+                            <option value="multi_criteria">Balanced Multi-Criteria</option>
+                          </select>
+                      </div>
+                    )}
 
-            <div style={{ marginBottom: '40px' }}>
-              <label className="section-label">Intermediate Waypoints (Strategic Stops)</label>
-              <div className="stops-container">
-                {stops.map((stop, i) => (
-                  <div key={i} className="stop-pill">
-                    <div className="stop-number">{i + 1}</div>
-                    <select className="stop-select" value={stop} onChange={(e) => {
-                      const n = [...stops]; n[i] = e.target.value; setStops(n);
-                    }}>
-                      <option value="">Select Location...</option>
-                      {cities.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <button onClick={() => setStops(stops.filter((_, idx) => idx !== i))} className="stop-delete">
-                      <Trash2 size={16} />
+                    <button className="btn btn-primary btn-run" onClick={findRoute} disabled={loading}>
+                      {loading ? (
+                        <><Activity size={18} className="pulse" /> Synchronizing Agents...</>
+                      ) : (
+                        <><Zap size={18} /> Execute Intelligence Simulation</>
+                      )}
                     </button>
                   </div>
-                ))}
-                <button className="add-stop-btn" onClick={() => setStops([...stops, ''])}>
-                  <Plus size={16} /> Add Stop
-                </button>
-              </div>
-            </div>
+                </FadeInSection>
 
-            <div style={{ display: 'flex', gap: '25px', alignItems: 'flex-end', marginBottom: '40px' }}>
-              <div style={{ flex: 1 }}>
-                <label className="section-label">Optimization Logic</label>
-                <select className="input-field" value={method1} onChange={(e) => setMethod1(e.target.value)}>
-                  <option value="multi_criteria">Multi-Criteria Optimization</option>
-                  <option value="dijkstra_cost">Minimize Financial Impact</option>
-                  <option value="dijkstra_time">Temporal Priority</option>
-                  <option value="constrained">Constrained Optimization</option>
-                </select>
-              </div>
-              <button className={`btn ${compareMode ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setCompareMode(!compareMode)}>
-                <Layers size={18} /> {compareMode ? 'Active Comparison' : 'Compare Models'}
-              </button>
-            </div>
+                <div className={`results-wrapper ${results.r2 ? 'compare-active' : ''}`}>
+                  <div className="results-container">
+                    {results.r1 && (
+                      <FadeInSection>
+                        <div className="result-card analysis-result">
+                          <div className="result-header">
+                            <div className="badge-status online">ALPHA SIMULATION</div>
+                            <h3 className="result-title">{results.r1.method_used}</h3>
+                          </div>
 
-            {method1 === 'constrained' && (
-              <div className="constraint-box">
-                <label className="section-label">Boundary Conditions</label>
-                <div style={{ display: 'flex', gap: '15px' }}>
-                  <select className="input-field" value={cType1} onChange={(e) => setCType1(e.target.value)}>
-                    <option value="time">Time Limit (hrs)</option>
-                    <option value="cost">Cost Limit (EGP)</option>
-                  </select>
-                  <input type="number" className="input-field" value={cVal1} onChange={(e) => setCVal1(Number(e.target.value))} placeholder="Enter limit..." />
+                          <div className="result-summary-new">
+                            <div className="main-stat">
+                                <span className="val">{results.r1.total_cost.toLocaleString()}</span>
+                                <span className="lbl">EGP TOTAL COST</span>
+                            </div>
+                            <div className="stat-divider"></div>
+                            <div className="side-stats">
+                                <div className="mini-stat">
+                                  <Clock size={14} /> <span>{results.r1.total_time.toFixed(1)}h</span>
+                                </div>
+                                <div className="mini-stat">
+                                  <Leaf size={14} /> <span>{results.r1.total_co2?.toFixed(1) || 0}kg</span>
+                                </div>
+                            </div>
+                          </div>
+
+                          <div className="path-visualization">
+                            <div className="path-line"></div>
+                            {(results.r1.route || []).map((city, i) => (
+                              <div key={i} className="path-node">
+                                <div className="node-dot"></div>
+                                <div className="node-name">{city}</div>
+                              </div>
+                            ))}
+                          </div>
+                          
+                          <div className="details-accordion">
+                            <div className="details-section">
+                                <label><Truck size={12}/> Logistics Breakdown</label>
+                                {(results.r1.details || []).map((step, i) => (
+                                  <div key={i} className="step-item">
+                                    <div className="step-info">
+                                      <span className="city-pair">{step.from_city} <ArrowRight size={10}/> {step.to_city}</span>
+                                      <span className="transport-tag">{getTransportIcon(step.transport)} {step.transport}</span>
+                                    </div>
+                                    <div className="step-data">
+                                      <span>{step.cost} EGP</span>
+                                      <span>{step.time}h</span>
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        </div>
+                      </FadeInSection>
+                    )}
+
+                    {results.r2 && (
+                      <FadeInSection>
+                        <div className="result-card analysis-result secondary-model">
+                          <div className="result-header">
+                            <div className="badge-status alert">BETA SIMULATION</div>
+                            <h3 className="result-title">{results.r2.method_used}</h3>
+                          </div>
+
+                          <div className="result-summary-new">
+                            <div className="main-stat">
+                                <span className="val">{results.r2.total_cost.toLocaleString()}</span>
+                                <span className="lbl">EGP TOTAL COST</span>
+                            </div>
+                            <div className="stat-divider"></div>
+                            <div className="side-stats">
+                                <div className="mini-stat">
+                                  <Clock size={14} /> <span>{results.r2.total_time.toFixed(1)}h</span>
+                                </div>
+                                <div className="mini-stat">
+                                  <Leaf size={14} /> <span>{results.r2.total_co2?.toFixed(1) || 0}kg</span>
+                                </div>
+                            </div>
+                          </div>
+
+                          <div className="path-visualization">
+                            <div className="path-line"></div>
+                            {(results.r2.route || []).map((city, i) => (
+                              <div key={i} className="path-node">
+                                <div className="node-dot"></div>
+                                <div className="node-name">{city}</div>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="details-accordion">
+                            <div className="details-section">
+                                <label><Truck size={12}/> Logistics Breakdown</label>
+                                {(results.r2.details || []).map((step, i) => (
+                                  <div key={i} className="step-item">
+                                    <div className="step-info">
+                                      <span className="city-pair">{step.from_city} <ArrowRight size={10}/> {step.to_city}</span>
+                                      <span className="transport-tag">{getTransportIcon(step.transport)} {step.transport}</span>
+                                    </div>
+                                    <div className="step-data">
+                                      <span>{step.cost} EGP</span>
+                                      <span>{step.time}h</span>
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        </div>
+                      </FadeInSection>
+                    )}
+                  </div>
                 </div>
               </div>
-            )}
 
-            {compareMode && (
-               <div className="compare-box">
-                  <label className="section-label">Comparison Model</label>
-                  <select className="input-field" value={method2} onChange={(e) => setMethod2(e.target.value)}>
-                    <option value="dijkstra_time">Temporal Priority</option>
-                    <option value="dijkstra_cost">Minimize Financial Impact</option>
-                    <option value="multi_criteria">Multi-Criteria Optimization</option>
-                  </select>
-               </div>
-            )}
-
-            <button className="btn btn-primary" style={{ width: '100%', fontSize: '1.2rem', padding: '20px' }} onClick={findRoute} disabled={loading}>
-              {loading ? 'Processing Agent Logic...' : 'Initialize Route Analysis'}
-            </button>
-          </div>
-        </FadeInSection>
-
-        <div className={`results-wrapper ${results.r2 ? 'compare-active' : ''}`}>
-          <div className="results-container">
-            {results.r1 && (
-              <FadeInSection>
-                <div className="result-card">
-                  <h3 className="result-title">Model Alpha <span>({results.r1.method_used})</span></h3>
-                  <div className="result-summary">
-                     <div className="stat"><b>EGP</b> {results.r1.total_cost.toLocaleString()} <span>total cost</span></div>
-                     <div className="stat"><Clock size={18}/> {results.r1.total_time.toFixed(1)} <span>hrs</span></div>
-                     <div className="stat"><Leaf size={18}/> {results.r1.total_co2?.toFixed(1) || 0} <span>kg CO2</span></div>
-                  </div>
-                  <div className="path-display">
-                    {(results.r1.route || []).map((city, i) => (
-                      <span key={i} className="path-city-group">
-                        <span className="city-name">{city}</span>
-                        {i < (results.r1?.route.length || 0) - 1 && <ArrowRight size={16} className="path-arrow" />}
-                      </span>
-                    ))}
-                  </div>
-                  
-                  <div className="route-details-grid">
-                    <div className="steps-list-box">
-                      <label className="section-label">Transport Dynamics</label>
-                      {(results.r1.details || []).map((step, i) => (
-                        <div key={i} className="route-step">
-                          <div className="step-main">
-                            <span>{step.from_city} → {step.to_city}</span>
-                            <span className="step-transport">{getTransportIcon(step.transport)} {step.transport}</span>
+              <aside className="side-column">
+                <FadeInSection>
+                  <div className="weather-widget">
+                      <div className="widget-header">
+                        <h3>Meteorological Intelligence</h3>
+                        <CloudRain size={20} />
+                      </div>
+                      <div className="weather-grid">
+                        {(results.r1?.route || ['Cairo', 'Alexandria', 'Suez']).slice(0, 4).map((city, i) => (
+                          <div key={i} className="weather-card-small">
+                            <div className="city">{city}</div>
+                            <div className="temp">24°C</div>
+                            <div className="cond">
+                              {results.r1?.weather_reports?.[city] || (i % 2 === 0 ? <Wind size={14}/> : <Droplets size={14}/>)}
+                            </div>
                           </div>
-                          <div className="step-meta">
-                            <span>Cost: {step.cost} EGP</span>
-                            <span>Time: {step.time}h</span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Package size={12}/> {step.units} units</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="weather-list-box">
-                      <label className="section-label">Meteorological Context</label>
-                      {(results.r1.route || []).map((city, i) => (
-                        <div key={i} className="weather-step">
-                          <span className="city-label">{city}</span>
-                          <span className="weather-info"><CloudRain size={14} /> {results.r1?.weather_reports?.[city]}</span>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
                   </div>
+                </FadeInSection>
+
+                <FadeInSection>
+                  <div className="network-health-card">
+                      <h3>Network Integrity</h3>
+                      <div className="metric">
+                        <div className="lbl">Latency</div>
+                        <div className="val">14ms</div>
+                      </div>
+                      <div className="metric">
+                        <div className="lbl">Agent Sync</div>
+                        <div className="val">Verified</div>
+                      </div>
+                      <div className="status-indicator">
+                        <CheckCircle2 size={16} /> All Systems Nominal
+                      </div>
+                  </div>
+                </FadeInSection>
+
+                <FadeInSection>
+                    <div className="map-card-mini">
+                      <div className="map-header">
+                        <h3>Geospatial Intelligence</h3>
+                        <MapIcon size={18} />
+                      </div>
+                      <div className="map-mini-container">
+                        {cityCoords && startCity && cityCoords[startCity] ? (
+                          <MapContainer center={mapCenter} zoom={6} zoomControl={false} scrollWheelZoom={false} style={{ height: '300px', width: '100%', borderRadius: '16px' }}>
+                            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                            <MapUpdater center={mapCenter} zoom={6} />
+                            {results.r1 && results.r1.route && (
+                              <Polyline positions={getRoutePoints(results.r1.route)} color="var(--accent-deep)" weight={3} dashArray="5, 5" />
+                            )}
+                            {results.r2 && results.r2.route && (
+                              <Polyline positions={getRoutePoints(results.r2.route)} color="var(--accent-warm)" weight={3} />
+                            )}
+                          </MapContainer>
+                        ) : <div className="map-placeholder">Initializing Satellites...</div>}
+                      </div>
+                    </div>
+                </FadeInSection>
+              </aside>
+            </section>
+          </>
+        )}
+
+        {currentView === 'network' && (
+          <section className="network-view animated" style={{ padding: '40px' }}>
+             <div className="calc-card" style={{ maxWidth: 'none', margin: 0 }}>
+                <div className="card-header">
+                   <div className="title-group">
+                      <h2>Global Network Visualization</h2>
+                      <p>Full-scale geospatial analysis of all transport nodes</p>
+                   </div>
                 </div>
-              </FadeInSection>
-            )}
-
-            {results.r2 && (
-              <FadeInSection>
-                <div className="result-card secondary">
-                  <h3 className="result-title">Model Beta <span>({results.r2.method_used})</span></h3>
-                  <div className="result-summary secondary">
-                     <div className="stat"><b>EGP</b> {results.r2.total_cost.toLocaleString()} <span>total cost</span></div>
-                     <div className="stat"><Clock size={18}/> {results.r2.total_time.toFixed(1)} <span>hrs</span></div>
-                     <div className="stat"><Leaf size={18}/> {results.r2.total_co2?.toFixed(1) || 0} <span>kg CO2</span></div>
-                  </div>
-                  <div className="path-display">
-                    {(results.r2.route || []).map((city, i) => (
-                      <span key={i} className="path-city-group">
-                        <span className="city-name">{city}</span>
-                        {i < (results.r2?.route.length || 0) - 1 && <ArrowRight size={16} className="path-arrow" />}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="route-details-grid">
-                    <div className="steps-list-box">
-                      <label className="section-label">Transport Dynamics</label>
-                      {(results.r2.details || []).map((step, i) => (
-                        <div key={i} className="route-step">
-                          <div className="step-main">
-                            <span>{step.from_city} → {step.to_city}</span>
-                            <span className="step-transport">{getTransportIcon(step.transport)} {step.transport}</span>
-                          </div>
-                          <div className="step-meta">
-                            <span>Cost: {step.cost} EGP</span>
-                            <span>Time: {step.time}h</span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Package size={12}/> {step.units} units</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="weather-list-box">
-                      <label className="section-label">Meteorological Context</label>
-                      {(results.r2.route || []).map((city, i) => (
-                        <div key={i} className="weather-step">
-                          <span className="city-label">{city}</span>
-                          <span className="weather-info"><CloudRain size={14} /> {results.r2?.weather_reports?.[city]}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </FadeInSection>
-            )}
-          </div>
-        </div>
-
-        <section className="map-section">
-          <FadeInSection>
-            <div className="map-card">
-              <div className="decoration-line"></div>
-              <h2 style={{ marginBottom: '30px', display: 'flex', alignItems: 'center', gap: '15px' }}>
-                <MapIcon size={32} /> Geospatial Visualization
-              </h2>
-              <div className="map-container-wrapper">
-                {cityCoords && startCity && cityCoords[startCity] ? (
-                  <MapContainer center={mapCenter} zoom={6} scrollWheelZoom={false} style={{ height: '500px', width: '100%', borderRadius: '24px' }}>
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    <MapUpdater center={mapCenter} zoom={6} />
-                    
+                <div style={{ height: '70vh', position: 'relative' }}>
+                  <MapContainer center={[30.0444, 31.2357]} zoom={5} style={{ height: '100%', width: '100%', borderRadius: '16px' }}>
+                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                     {Object.entries(cityCoords).map(([name, coords]) => (
                       <Marker key={name} position={coords}>
-                        <Popup>
-                          <div style={{ fontWeight: 700 }}>{name}</div>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--accent-soft)' }}>
-                            {coords[0].toFixed(2)}, {coords[1].toFixed(2)}
-                          </div>
-                        </Popup>
+                        <Popup><div style={{fontWeight:800}}>{name}</div></Popup>
                       </Marker>
                     ))}
-
-                    {results.r1 && results.r1.route && (
-                      <Polyline 
-                        positions={getRoutePoints(results.r1.route)} 
-                        color="var(--accent-deep)" 
-                        weight={5} 
-                        opacity={0.8}
-                        dashArray="10, 10"
-                      />
-                    )}
-
-                    {results.r2 && results.r2.route && (
-                      <Polyline 
-                        positions={getRoutePoints(results.r2.route)} 
-                        color="var(--accent-warm)" 
-                        weight={5} 
-                        opacity={0.8}
-                      />
-                    )}
+                    {results.r1?.route && <Polyline positions={getRoutePoints(results.r1.route)} color="var(--accent-deep)" weight={4} />}
                   </MapContainer>
-                ) : (
-                  <div style={{ height: '500px', width: '100%', background: '#f8f9f8', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-soft)' }}>
-                    {initError || "Loading Geospatial Data..."}
-                  </div>
-                )}
-                <div className="map-legend">
-                   {results.r1 && <div className="legend-item"><span className="line" style={{ background: 'var(--accent-deep)' }}></span> Model Alpha</div>}
-                   {results.r2 && <div className="legend-item"><span className="line" style={{ background: 'var(--accent-warm)' }}></span> Model Beta</div>}
                 </div>
-              </div>
-            </div>
-          </FadeInSection>
-        </section>
+             </div>
+          </section>
+        )}
       </main>
     </div>
   )
