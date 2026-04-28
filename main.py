@@ -1,6 +1,7 @@
 # version 2.0
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 import networkx as nx
@@ -41,8 +42,8 @@ class WeatherClient:
             # Request current weather based on coordinates
             params = {"key": self.api_key, "q": f"{lat},{lon}"}
             print(f"DEBUG: Fetching NEW weather for {city} at {lat}, {lon}...")
-            # Increased timeout to 10s to handle slower connections
-            response = requests.get(self.url, params=params, timeout=10)
+            # Increased timeout to 15s to handle slower connections
+            response = requests.get(self.url, params=params, timeout=15)
 
             if response.status_code == 200:
                 data = response.json()
@@ -60,7 +61,9 @@ class WeatherClient:
             print(f"!!! Weather API ERROR for {city} ({lat}, {lon}): {e}")
         
         # Fallback to neutral weather if the API fails, ensuring routing still works
-        return {"condition": "N/A", "wind": 0.0}
+        fallback = {"condition": "N/A", "wind": 0.0}
+        self.cache[city] = (now, fallback)
+        return fallback
 
 # --- ENGINE ---
 # The core logic for Multi-Agent System (MAS) Routing.
@@ -477,6 +480,12 @@ def delete_project(pid: str):
         del data[pid]
         with open("projects.json", "w", encoding="utf-8") as f: json.dump(data, f, indent=4)
     return {"ok": True}
+
+# ... (previous project endpoints)
+
+# Mount static files to serve the frontend
+if os.path.exists("frontend/dist"):
+    app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="static")
 
 # Entry point for running the web server
 if __name__ == "__main__":
