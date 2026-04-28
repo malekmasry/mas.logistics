@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pandas
+networkx
+openpyxl
+requests
+python-dotenv
+pydantic

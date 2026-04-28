@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { 
-  Navigation, 
   Plus, 
   Trash2, 
   CloudRain, 
@@ -14,8 +13,6 @@ import {
   Layers,
   Globe,
   Zap,
-  Shield,
-  ChevronDown,
   Clock,
   Leaf,
   Package,
@@ -23,10 +20,8 @@ import {
   Activity,
   BarChart3,
   AlertTriangle,
-  CheckCircle2,
   Wind,
   Droplets,
-  ThermometerSun,
   TrendingUp,
   Boxes
 } from 'lucide-react'
@@ -40,7 +35,7 @@ import CityWheelPicker from './components/CityWheelPicker'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 
-const API_BASE = "http://127.0.0.1:8000/api"
+const API_BASE = window.location.origin + "/api"
 
 interface RouteStep {
   from_city: string
@@ -364,15 +359,6 @@ function App() {
           ))}
         </div>
         
-        <div className="system-health">
-          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--accent-soft)', marginBottom: '8px' }}>System Health</div>
-          <div className="health-bar"><div className="health-fill"></div></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '0.65rem' }}>
-            <span>Operational</span>
-            <span>99.8%</span>
-          </div>
-        </div>
-
         <button className="btn btn-secondary" onClick={saveProject} style={{ width: '100%' }}>
           <Save size={18} /> Commit to Archive
         </button>
@@ -384,7 +370,7 @@ function App() {
             <Activity size={16} />
             <span>MAS Predictive Engine v2.1 // System Status: Nominal</span>
           </div>
-          <div className="user-profile">
+          <div className="user-profile" onClick={() => window.open('https://github.com/malekmasry/mas.logistics', '_blank')} style={{ cursor: 'pointer' }}>
             <div className="avatar">MM</div>
             <div className="user-info">
               <div className="user-name">Malek Masry</div>
@@ -563,7 +549,7 @@ function App() {
                           <div className="path-visualization">
                             <div className="path-line"></div>
                             {(results.r1.route || []).map((city, i) => (
-                              <div key={i} className="path-node">
+                              <div key={i} className="path-node" title={results.r1?.weather_reports?.[city] || 'Weather N/A'}>
                                 <div className="node-dot"></div>
                                 <div className="node-name">{city}</div>
                               </div>
@@ -618,7 +604,7 @@ function App() {
                           <div className="path-visualization">
                             <div className="path-line"></div>
                             {(results.r2.route || []).map((city, i) => (
-                              <div key={i} className="path-node">
+                              <div key={i} className="path-node" title={results.r2?.weather_reports?.[city] || 'Weather N/A'}>
                                 <div className="node-dot"></div>
                                 <div className="node-name">{city}</div>
                               </div>
@@ -666,23 +652,6 @@ function App() {
                             </div>
                           </div>
                         ))}
-                      </div>
-                  </div>
-                </FadeInSection>
-
-                <FadeInSection>
-                  <div className="network-health-card">
-                      <h3>Network Integrity</h3>
-                      <div className="metric">
-                        <div className="lbl">Latency</div>
-                        <div className="val">14ms</div>
-                      </div>
-                      <div className="metric">
-                        <div className="lbl">Agent Sync</div>
-                        <div className="val">Verified</div>
-                      </div>
-                      <div className="status-indicator">
-                        <CheckCircle2 size={16} /> All Systems Nominal
                       </div>
                   </div>
                 </FadeInSection>
