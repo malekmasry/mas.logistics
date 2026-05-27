@@ -605,9 +605,39 @@ def delete_project(pid: str):
 
 # ... (previous project endpoints)
 
-# Mount static files to serve the frontend
+
+# ---------------------------------------------------------------------------
+# Root endpoint — always responds so the app is reachable even when the
+# frontend has not been built.  If the static-file mount below succeeds this
+# route is shadowed by the SPA for browser traffic, but it remains available
+# as a plain JSON health-check for infrastructure probes.
+# ---------------------------------------------------------------------------
+@app.get("/")
+def root():
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "ok",
+            "message": "MAS Routing API is running",
+            "docs": "/docs",
+            "health": "/health",
+        },
+    )
+
+
+# Mount static files to serve the frontend.
+# Wrapped in try/except so a missing, empty, or otherwise invalid
+# frontend/dist directory never crashes the process at startup.
 if os.path.exists("frontend/dist"):
-    app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="static")
+    try:
+        app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="static")
+        logger.info("Static frontend mounted from 'frontend/dist'")
+    except Exception as exc:
+        logger.warning(
+            "Could not mount static files from 'frontend/dist': %s — "
+            "API endpoints remain available but the frontend will not be served.",
+            exc,
+        )
 
 # Entry point for running the web server
 if __name__ == "__main__":
