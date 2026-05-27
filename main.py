@@ -2,6 +2,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 import networkx as nx
@@ -13,11 +14,22 @@ import copy
 import heapq
 import json
 import time
+import logging
+import traceback
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 # Load environment variables from .env file for configuration like API keys
 load_dotenv()
+
+# Configure structured logging so every message (including startup errors) is
+# visible in container / Uvicorn log streams.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+logger = logging.getLogger("mas_routing")
 
 # --- WEATHER CLIENT WITH CACHE & DEBUGGING ---
 # This class handles all communication with the external Weather API.
@@ -35,13 +47,13 @@ class WeatherClient:
         if city in self.cache:
             timestamp, data = self.cache[city]
             if now - timestamp < self.ttl:
-                print(f"DEBUG: Using cached weather for {city} (Age: {int(now - timestamp)}s)")
+                logger.debug("Using cached weather for %s (age: %ds)", city, int(now - timestamp))
                 return data
         
         try:
             # Request current weather based on coordinates
             params = {"key": self.api_key, "q": f"{lat},{lon}"}
-            print(f"DEBUG: Fetching NEW weather for {city} at {lat}, {lon}...")
+            logger.info("Fetching weather for %s at %.4f, %.4f", city, lat, lon)
             # Increased timeout to 15s to handle slower connections
             response = requests.get(self.url, params=params, timeout=15)
 
@@ -51,14 +63,14 @@ class WeatherClient:
                     "condition": data['current']['condition']['text'],
                     "wind": data['current']['wind_kph']
                 }
-                print(f"DEBUG: Successfully fetched {city}: {result['condition']}, {result['wind']}km/h")
+                logger.info("Weather for %s: %s, %.1f km/h", city, result['condition'], result['wind'])
                 # Store data with current timestamp
                 self.cache[city] = (now, result)
                 return result
             else:
-                print(f"!!! Weather API returned {response.status_code} for {city}")
+                logger.warning("Weather API returned HTTP %d for %s", response.status_code, city)
         except Exception as e:
-            print(f"!!! Weather API ERROR for {city} ({lat}, {lon}): {e}")
+            logger.warning("Weather API error for %s (%s, %s): %s", city, lat, lon, e)
         
         # Fallback to neutral weather if the API fails, ensuring routing still works
         fallback = {"condition": "N/A", "wind": 0.0}
@@ -74,7 +86,7 @@ class MASRoutingEngine:
         # Securely retrieve the API key from environment variables
         api_key = os.getenv("WEATHER_API_KEY")
         if not api_key:
-            print("WARNING: WEATHER_API_KEY not set. Weather features will use fallback data.")
+            logger.warning("WEATHER_API_KEY not set — weather features will use fallback data")
         self.weather = WeatherClient(api_key)
         
         # City coordinates will be loaded from the 'cities' Excel sheet
@@ -126,7 +138,9 @@ class MASRoutingEngine:
                                          sensitivity=float(row['sensitivity']),
                                          transport=row['type'])
         except Exception as e:
-            print(f"Engine data load failed: {e}")
+            logger.error("Engine data load failed: %s", e)
+            logger.debug("Full traceback:\n%s", traceback.format_exc())
+            raise
 
     def calculate_metrics(self, edata, user_mass, user_volume):
         if user_mass < edata['mass_min']:
@@ -373,7 +387,7 @@ class MASRoutingEngine:
                               "co2": round(best_metrics['co2'], 2), "units": best_metrics['num_transports']})
             return path, steps, tc, tt, tco2
         except Exception as e:
-            print(f"Error in solve_segment: {e}")
+            logger.error("solve_segment error (%s -> %s): %s", start, end, e)
             raise HTTPException(404, f"No path found between {start} and {end}")
 
 # --- API ---
@@ -381,8 +395,69 @@ class MASRoutingEngine:
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-# Instantiate the routing engine with the logistics dataset
-ENGINE = MASRoutingEngine('data.xlsx')
+# ---------------------------------------------------------------------------
+# Engine initialisation — wrapped so a bad Excel file / missing sheet / any
+# other startup error does NOT crash the process before Uvicorn can bind the
+# port and serve the /health endpoint.
+# ---------------------------------------------------------------------------
+ENGINE: Optional[MASRoutingEngine] = None
+_engine_error: Optional[str] = None  # human-readable reason for failure
+
+_EXCEL_PATH = "data.xlsx"
+
+
+def _init_engine() -> None:
+    """Attempt to create the routing engine and update module-level state."""
+    global ENGINE, _engine_error
+    logger.info("Initialising MASRoutingEngine from '%s' …", _EXCEL_PATH)
+    try:
+        if not os.path.exists(_EXCEL_PATH):
+            raise FileNotFoundError(
+                f"Data file '{_EXCEL_PATH}' not found in working directory '{os.getcwd()}'"
+            )
+        ENGINE = MASRoutingEngine(_EXCEL_PATH)
+        _engine_error = None
+        logger.info(
+            "MASRoutingEngine ready — %d cities, %d edges loaded",
+            len(ENGINE.city_coords),
+            ENGINE.base_graph.number_of_edges(),
+        )
+    except Exception as exc:
+        ENGINE = None
+        _engine_error = f"{type(exc).__name__}: {exc}"
+        logger.error("MASRoutingEngine failed to initialise: %s", _engine_error)
+        logger.error("Full traceback:\n%s", traceback.format_exc())
+
+
+# Run at import time — failure is logged but does NOT raise.
+_init_engine()
+
+
+def _get_engine() -> MASRoutingEngine:
+    """Return the live engine, attempting lazy re-initialisation if needed.
+
+    Raises HTTP 503 with a diagnostic message when the engine is unavailable
+    so callers always get a meaningful response instead of a 500 / connection
+    refused.
+    """
+    global ENGINE, _engine_error
+    if ENGINE is None:
+        logger.info("Engine not ready — attempting lazy re-initialisation …")
+        _init_engine()
+    if ENGINE is None:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "engine_unavailable",
+                "error": _engine_error,
+                "hint": (
+                    "The routing engine could not load 'data.xlsx'. "
+                    "Check that the file exists, is a valid Excel workbook, "
+                    "and contains 'routes' and 'transport' sheets."
+                ),
+            },
+        )
+    return ENGINE
 
 # Pydantic model for validating incoming route requests
 class RouteRequest(BaseModel):
@@ -395,16 +470,62 @@ class RouteRequest(BaseModel):
     constraint_type: Optional[str] = None
     constraint_value: Optional[float] = None
 
+
+# ---------------------------------------------------------------------------
+# Health check — always responds, even when the engine is broken.
+# Returns 200 + {"status": "ok"} when ready, 503 + diagnostics otherwise.
+# ---------------------------------------------------------------------------
+@app.get("/health")
+def health_check():
+    if ENGINE is not None:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "ok",
+                "engine": "ready",
+                "cities": len(ENGINE.city_coords),
+                "edges": ENGINE.base_graph.number_of_edges(),
+                "excel": _EXCEL_PATH,
+            },
+        )
+    return JSONResponse(
+        status_code=503,
+        content={
+            "status": "degraded",
+            "engine": "unavailable",
+            "error": _engine_error,
+            "excel": _EXCEL_PATH,
+            "cwd": os.getcwd(),
+            "excel_exists": os.path.exists(_EXCEL_PATH),
+            "hint": (
+                "The routing engine failed to initialise. "
+                "POST to /health/retry to attempt re-initialisation, "
+                "or check the container logs for the full traceback."
+            ),
+        },
+    )
+
+
+@app.post("/health/retry")
+def health_retry():
+    """Manually trigger a re-initialisation attempt (useful after fixing config)."""
+    _init_engine()
+    return health_check()
+
+
 # Primary endpoint to find an end-to-end route, handling any intermediate stops
 @app.get("/api/cities_data")
 def get_cities_data():
+    engine = _get_engine()
     return {
-        "cities": sorted(list(ENGINE.city_coords.keys())),
-        "coords": ENGINE.city_coords
+        "cities": sorted(list(engine.city_coords.keys())),
+        "coords": engine.city_coords
     }
 
 @app.post("/api/find_route")
 def find_route(request: RouteRequest):
+    engine = _get_engine()
+
     # Validation: Ensure mass and volume are not negative or zero
     mass = max(0.1, request.mass)
     volume = max(0.1, request.volume)
@@ -413,7 +534,7 @@ def find_route(request: RouteRequest):
     points = [request.start.strip()] + stops + [request.end.strip()]
     
     if request.method == "constrained" and request.constraint_value:
-        p, d, c, t, co2 = ENGINE.solve_constrained_multistop(points, request.constraint_type, request.constraint_value, mass, volume)
+        p, d, c, t, co2 = engine.solve_constrained_multistop(points, request.constraint_type, request.constraint_value, mass, volume)
         return {
             "route": p,
             "details": d,
@@ -421,7 +542,7 @@ def find_route(request: RouteRequest):
             "total_time": round(t, 2),
             "total_co2": round(co2, 2),
             "method_used": request.method,
-            "weather_reports": ENGINE.get_path_weather(p)
+            "weather_reports": engine.get_path_weather(p)
         }
 
     final_path, final_details = [], []
@@ -429,7 +550,7 @@ def find_route(request: RouteRequest):
     
     # Process each leg of the journey sequentially (Start -> Stop1 -> Stop2 -> End)
     for i in range(len(points) - 1):
-        p, d, c, t, co2 = ENGINE.solve_segment(points[i], points[i+1], request.method, 
+        p, d, c, t, co2 = engine.solve_segment(points[i], points[i+1], request.method, 
                                               request.constraint_type, request.constraint_value, mass, volume)
         # Stitch paths together, avoiding duplicate city names at segment boundaries
         if not final_path: final_path.extend(p)
@@ -446,13 +567,14 @@ def find_route(request: RouteRequest):
         "total_time": round(total_time, 2),
         "total_co2": round(total_co2, 2),
         "method_used": request.method,
-        "weather_reports": ENGINE.get_path_weather(final_path)
+        "weather_reports": engine.get_path_weather(final_path)
     }
 
 # Endpoint to clear the weather cache for testing purposes
 @app.get("/api/clear_cache")
 def clear_weather_cache():
-    ENGINE.weather.cache.clear()
+    engine = _get_engine()
+    engine.weather.cache.clear()
     return {"ok": True, "message": "Weather cache cleared"}
 
 # Endpoint to retrieve all saved routing projects from local storage
